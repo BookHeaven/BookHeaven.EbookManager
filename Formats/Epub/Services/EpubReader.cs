@@ -598,28 +598,32 @@ public partial class EpubReader : IEbookReader
 		{
 			throw new Exception("EpubReader not initialized. Call GetOpfPathAsync first.");
 		}
-		
+
 		var absolutePath = GetAbsolutePath(path)!;
-		
+
 		if (_contentCache.TryGetValue(absolutePath, out var cachedContent))
 		{
 			return cachedContent;
 		}
+
+		var memory = new MemoryStream();
 		await _zipLock.WaitAsync();
 		try
 		{
 			var entry = _zipArchive!.GetEntry(absolutePath) ?? throw new Exception($"Could not load file: {path}");
 			await using var stream = entry.Open();
-			using var reader = new StreamReader(stream);
-			var content = await reader.ReadToEndAsync();
-			_contentCache[absolutePath] = content;
-			return content;
+			await stream.CopyToAsync(memory);
 		}
 		finally
 		{
 			_zipLock.Release();
 		}
-			
+
+		memory.Position = 0;
+		using var reader = new StreamReader(memory);
+		var content = await reader.ReadToEndAsync();
+		_contentCache[absolutePath] = content;
+		return content;
 	}
 	
 	/// <summary>
