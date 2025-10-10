@@ -409,7 +409,7 @@ public partial class EpubReader : IEbookReader
 	/// </summary>
 	/// <param name="content">Html</param>
 	/// <returns>Title</returns>
-	private string? GetChapterTitle(string content)
+	private static string? GetChapterTitle(string content)
 	{
 		var document = new HtmlDocument();
 		document.LoadHtml(content);
@@ -420,7 +420,7 @@ public partial class EpubReader : IEbookReader
 
 		static string DecodeNumericEntities(string input)
 		{
-			return Regex.Replace(input, "&#([0-9]+);", match =>
+			return NumericEntitiesRegex().Replace(input, match =>
 			{
 				var codePoint = int.Parse(match.Groups[1].Value);
 				return char.ConvertFromUtf32(codePoint);
@@ -648,6 +648,8 @@ public partial class EpubReader : IEbookReader
 	private static partial Regex HtmlRegex();
 	[GeneratedRegex(@"class\s*=\s*[""']([^""']+)[""']", RegexOptions.IgnoreCase, "es-ES")]
 	private static partial Regex CssClassRegex();
+	[GeneratedRegex("&#([0-9]+);")]
+	private static partial Regex NumericEntitiesRegex();
 
     public void Dispose()
     {
@@ -661,6 +663,4 @@ public partial class EpubReader : IEbookReader
 	    _zipLock?.Dispose();
 	    GC.SuppressFinalize(this);
     }
-
-    
 }
