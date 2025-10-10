@@ -199,13 +199,15 @@ public partial class EpubReader : IEbookReader
 		{
 			throw new Exception("EpubReader not initialized. Call GetOpfPathAsync first.");
 		}
-		
+
 		var absolutePath = GetAbsolutePath(path)!;
-    
+
 		if (_imageCache.TryGetValue(absolutePath, out var cachedImage))
 		{
 			return cachedImage;
 		}
+
+		var memory = new MemoryStream();
 		await _zipLock.WaitAsync();
 		try
 		{
@@ -213,16 +215,16 @@ public partial class EpubReader : IEbookReader
 			if (entry == null) return [];
 
 			await using var stream = entry.Open();
-			using var memory = new MemoryStream();
 			await stream.CopyToAsync(memory);
-			var bytes = memory.ToArray();
-			_imageCache[absolutePath] = bytes;
-			return bytes;
 		}
 		finally
 		{
 			_zipLock.Release();
 		}
+
+		var bytes = memory.ToArray();
+		_imageCache[absolutePath] = bytes;
+		return bytes;
 	}
 
 	/// <summary>
