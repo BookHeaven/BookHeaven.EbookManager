@@ -446,12 +446,11 @@ public partial class EpubReader : IEbookReader
 	/// </summary>
 	/// <param name="content">Html</param>
 	/// <returns>Name of the class</returns>
-	private string? GetParagraphClass(string content)
+	private static string? GetParagraphClass(string content)
 	{
 		const int minClassCount = 4;
 		
-		var classRegex = new Regex(@"class\s*=\s*[""']([^""']+)[""']", RegexOptions.IgnoreCase);
-		var matches = classRegex.Matches(content);
+		var matches = CssClassRegex().Matches(content);
 		var classFrequency = new Dictionary<string, int>();
 		foreach (Match match in matches)
 		{
@@ -647,6 +646,8 @@ public partial class EpubReader : IEbookReader
 	private static partial Regex FontFaceRegex();
 	[GeneratedRegex("<.*?>")]
 	private static partial Regex HtmlRegex();
+	[GeneratedRegex(@"class\s*=\s*[""']([^""']+)[""']", RegexOptions.IgnoreCase, "es-ES")]
+	private static partial Regex CssClassRegex();
 
     public void Dispose()
     {
@@ -660,4 +661,6 @@ public partial class EpubReader : IEbookReader
 	    _zipLock?.Dispose();
 	    GC.SuppressFinalize(this);
     }
+
+    
 }
