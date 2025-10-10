@@ -273,13 +273,13 @@ public partial class EpubReader : IEbookReader
 		{
 			// V3 NAV TOC
 			var nav = await LoadNavAsync(_package.Manifest.Items.First(i => i.Properties == "nav").Href);
-			tableOfContents = await MapNavToTableOfContents(nav.ChapterList.First().Chapter);
+			tableOfContents = MapNavToTableOfContents(nav.ChapterList.First().Chapter);
 		}
 		else if (_package!.Spine.Toc != null)
 		{
 			// V2 NCX TOC
 			var ncx = await ReadEntryAsync<NCX>(_package.Manifest.Items.First(x => x.Id == _package.Spine.Toc).Href);
-			tableOfContents = await MapNavMapToTableOfContents(ncx.NavMap);
+			tableOfContents = MapNavMapToTableOfContents(ncx.NavMap);
 		}
 		else
 		{
@@ -306,17 +306,18 @@ public partial class EpubReader : IEbookReader
 	}
 
 	/// <summary>
-	/// Recursively loads the chapters from the NCX TOC
+	/// Recursively loads the chapters from the NCX TOC (optimized for lower-end devices)
 	/// </summary>
 	/// <param name="navpoints">List of NXC NavPoints</param>
 	/// <returns>List of TocEntry</returns>
-	private async Task<List<TocEntry>> MapNavMapToTableOfContents(List<NCXNavPoint> navpoints)
+	private List<TocEntry> MapNavMapToTableOfContents(List<NCXNavPoint> navpoints)
 	{
-		var tasks = navpoints.Select(async navPoint =>
+		var entries = new List<TocEntry>();
+		foreach (var navPoint in navpoints)
 		{
 			if (_coverPath != null && CleanPath(navPoint.Content?.Src) == _coverPath)
 			{
-				return null;
+				continue;
 			}
 
 			var chapter = new TocEntry
@@ -325,42 +326,40 @@ public partial class EpubReader : IEbookReader
 				Id = _package!.Manifest.Items.FirstOrDefault(x => x.Href == CleanPath(navPoint.Content?.Src))?.Id
 			};
 
-			if(navPoint.NavPoints.Count > 0)
+			if (navPoint.NavPoints.Count > 0)
 			{
-				chapter.Entries = await MapNavMapToTableOfContents(navPoint.NavPoints);
+				// Recursively process child navpoints, but synchronously
+				chapter.Entries = MapNavMapToTableOfContents(navPoint.NavPoints);
 			}
-			
-			return chapter;
-		});
 
-		var results = await Task.WhenAll(tasks);
-		return results.Where(ch => ch != null).ToList()!;
-	}
+			entries.Add(chapter);
+		}
+		return entries;
+	}			
 
 	/// <summary>
 	/// Maps the V3 NAV TOC to an EpubChapter list recursively
 	/// </summary>
 	/// <param name="navItems">List of Nav li items</param>
 	/// <returns>List of TocEntry</returns>
-	private async Task<List<TocEntry>> MapNavToTableOfContents(List<NavLi> navItems)
+	private List<TocEntry> MapNavToTableOfContents(List<NavLi> navItems)
 	{
-		var tasks = navItems.Select(async navItem =>
+		var entries = new List<TocEntry>();
+		foreach (var navItem in navItems)
 		{
 			var chapter = new TocEntry
 			{
 				Title = navItem.Link.Text,
 				Id = _package!.Manifest.Items.FirstOrDefault(x => x.Href == CleanPath(navItem.Link.Href))?.Id
 			};
-
+			
 			if(navItem.ChapterList.Count > 0)
 			{
-				chapter.Entries = await MapNavToTableOfContents(navItem.ChapterList.First().Chapter);
+				chapter.Entries = MapNavToTableOfContents(navItem.ChapterList.First().Chapter);
 			}
-				
-			return chapter;
-		});
-		var results = await Task.WhenAll(tasks);
-		return results.ToList();
+			entries.Add(chapter);
+		}
+		return entries;
 	}
 
 	/// <summary>
