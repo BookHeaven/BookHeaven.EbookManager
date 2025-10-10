@@ -382,7 +382,7 @@ public partial class EpubReader : IEbookReader
 				Content = content,
 				Title = GetChapterTitle(content),
 				Weight = GetWordCount(content),
-				Stylesheets = GetStylesheets(content),
+				Stylesheets = GetStylesheetsFromHtml(content),
 				ParagraphClassName = GetParagraphClass(content)
 			};
 		}));
@@ -433,7 +433,7 @@ public partial class EpubReader : IEbookReader
 	/// </summary>
 	/// <param name="content">Html</param>
 	/// <returns>List of paths</returns>
-	private List<string> GetStylesheets(string content)
+	private static List<string> GetStylesheetsFromHtml(string content)
 	{
 		var document = new HtmlDocument();
 		document.LoadHtml(content);
