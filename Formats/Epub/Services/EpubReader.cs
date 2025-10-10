@@ -376,17 +376,20 @@ public partial class EpubReader : IEbookReader
 		{
 			var item = _package!.Manifest.Items.First(x => x.Id == itemRef.IdRef);
 			var content = await LoadFileContentAsync(item.Href);
+			
+			var document = new HtmlDocument();
+			document.LoadHtml(content);
 			return new Chapter
 			{
 				Identifier = item.Id,
 				Content = content,
-				Title = GetChapterTitle(content),
+				Title = GetTitleFromHtml(document),
 				Weight = GetWordCount(content),
-				Stylesheets = GetStylesheetsFromHtml(content),
+				Stylesheets = GetStylesheetsFromHtml(document),
 				ParagraphClassName = GetParagraphClass(content)
 			};
 		}));
-			
+
 		return items.ToList();
 	}
 
@@ -405,16 +408,12 @@ public partial class EpubReader : IEbookReader
 	}
 		
 	/// <summary>
-	/// Gets the title of a chapter from the html content
+	/// Gets the title of a chapter from the html document
 	/// </summary>
-	/// <param name="content">Html</param>
+	/// <param name="document">Html document</param>
 	/// <returns>Title</returns>
-	private static string? GetChapterTitle(string content)
+	private static string? GetTitleFromHtml(HtmlDocument document)
 	{
-		var document = new HtmlDocument();
-		document.LoadHtml(content);
-		
-		//var titleNode = document.DocumentNode.SelectSingleNode("//title");
 		var titleNode = document.QuerySelector("title");
 		return titleNode != null ? DecodeNumericEntities(titleNode.InnerText) : null;
 
@@ -429,14 +428,12 @@ public partial class EpubReader : IEbookReader
 	}
 		
 	/// <summary>
-	/// Gets the stylesheets referenced in the html content
+	/// Gets the stylesheets referenced in the html
 	/// </summary>
-	/// <param name="content">Html</param>
+	/// <param name="document">Html document</param>
 	/// <returns>List of paths</returns>
-	private static List<string> GetStylesheetsFromHtml(string content)
+	private static List<string> GetStylesheetsFromHtml(HtmlDocument document)
 	{
-		var document = new HtmlDocument();
-		document.LoadHtml(content);
 		var linkNodes = document.QuerySelectorAll("link[href]");
 		return linkNodes == null ? [] : linkNodes.Select(link => link.Attributes["href"].Value).ToList();
 	}
