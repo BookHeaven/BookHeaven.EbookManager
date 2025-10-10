@@ -232,27 +232,10 @@ public partial class EpubReader : IEbookReader
 	private async Task<Content> LoadContent()
 	{
 		var content = new Content();
-			
-		var cssFiles = _package!.Manifest.Items.Where(x => x.MediaType.Equals("text/css")).ToList();
-		var cssTasks = cssFiles.Select(async item =>
-		{
-			var css = await LoadFileContentAsync(item.Href);
-			var imports = CssImportRegex().Matches(css);
-			foreach (var import in imports.Cast<Match>())
-			{
-				css = css.Replace(import.Value, null);
-			}
-			var fontFaces = FontFaceRegex().Matches(css);
-			foreach (var fontFace in fontFaces.Cast<Match>())
-			{
-				css = css.Replace(fontFace.Value, null);
-			}
-			var processedCss = await HtmlManager.ApplyCssProcessing(css);
-			return new Stylesheet { Identifier= item.Href, Content = processedCss};
-		});
 
-		content.Stylesheets = await Task.WhenAll(cssTasks);
-			
+		var cssFiles = _package!.Manifest.Items.Where(x => x.MediaType.Equals("text/css"));
+		content.Stylesheets = await LoadStylesheets(cssFiles);
+
 		List<TocEntry> tableOfContents;
 		TocEntry? cover = null;
 		var coverItem = _package!.Manifest.Items.FirstOrDefault(x => x.Id == _package.Spine.ItemRefs.FirstOrDefault()?.IdRef);
@@ -265,10 +248,10 @@ public partial class EpubReader : IEbookReader
 				Title = "Cover",
 			};
 		}
-			
+
 		content.Chapters = await MapSpineToChapters();
-			
-			
+
+
 		if (_package.Manifest.Items.Any(i => i.Properties == "nav"))
 		{
 			// V3 NAV TOC
@@ -298,11 +281,32 @@ public partial class EpubReader : IEbookReader
 				tableOfContents.Insert(0, cover);
 			}
 		}
-			
+
 		content.TableOfContents = tableOfContents;
 
 		return content;
 
+	}
+
+	private async Task<IReadOnlyList<Stylesheet>> LoadStylesheets(IEnumerable<Item> cssFiles)
+	{
+		var cssTasks = cssFiles.Select(async item =>
+		{
+			var css = await LoadFileContentAsync(item.Href);
+			var imports = CssImportRegex().Matches(css);
+			foreach (var import in imports.Cast<Match>())
+			{
+				css = css.Replace(import.Value, null);
+			}
+			var fontFaces = FontFaceRegex().Matches(css);
+			foreach (var fontFace in fontFaces.Cast<Match>())
+			{
+				css = css.Replace(fontFace.Value, null);
+			}
+			var processedCss = await HtmlManager.ApplyCssProcessing(css);
+			return new Stylesheet { Identifier= item.Href, Content = processedCss};
+		});
+		return await Task.WhenAll(cssTasks);
 	}
 
 	/// <summary>
