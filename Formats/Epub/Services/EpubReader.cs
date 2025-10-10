@@ -634,11 +634,11 @@ public partial class EpubReader : IEbookReader
 	private async Task<Nav> LoadNavAsync(string path)
 	{
 		var content = await LoadFileContentAsync(path);
-		// Deserialize content from inside body tag into Nav using XDocument
 		var doc = XDocument.Parse(content);
-		var navContent = doc.Descendants().First(x => x.Name.LocalName == "body").Descendants().First(x => x.Name.LocalName == "nav").ToString();
+		var navElement = doc.Descendants().First(x => x.Name.LocalName == "body").Descendants().First(x => x.Name.LocalName == "nav");
 		var serializer = GetSerializer<Nav>();
-		return (Nav)serializer.Deserialize(new StringReader(navContent))!;
+		using var reader = navElement.CreateReader();
+		return (Nav)serializer.Deserialize(reader)!;
 	}
 
 	[GeneratedRegex(@"@import\s*[^;]+;")]
