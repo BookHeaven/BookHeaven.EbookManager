@@ -236,21 +236,19 @@ public partial class EpubReader : IEbookReader
 		var cssFiles = _package!.Manifest.Items.Where(x => x.MediaType.Equals("text/css")).ToList();
 		var cssTasks = cssFiles.Select(async item =>
 		{
-			StringBuilder cssContent = new();
 			var css = await LoadFileContentAsync(item.Href);
-			cssContent.Append(css);
 			var imports = CssImportRegex().Matches(css);
 			foreach (var import in imports.Cast<Match>())
 			{
-				cssContent.Replace(import.Value, null);
+				css = css.Replace(import.Value, null);
 			}
 			var fontFaces = FontFaceRegex().Matches(css);
 			foreach (var fontFace in fontFaces.Cast<Match>())
 			{
-				cssContent.Replace(fontFace.Value, null);
+				css = css.Replace(fontFace.Value, null);
 			}
-			await HtmlManager.ReplaceCssProperties(cssContent);
-			return new Stylesheet { Identifier= item.Href, Content = cssContent.ToString()};
+			var processedCss = await HtmlManager.ApplyCssProcessing(css);
+			return new Stylesheet { Identifier= item.Href, Content = processedCss};
 		});
 
 		content.Stylesheets = await Task.WhenAll(cssTasks);
@@ -580,10 +578,8 @@ public partial class EpubReader : IEbookReader
 			}
 		}
 
-		StringBuilder result = new(doc.DocumentNode.OuterHtml);
-
-		await HtmlManager.ReplaceCssProperties(result);
-		return result.ToString();
+		var processedHtml = await HtmlManager.ApplyCssProcessing(doc.DocumentNode.OuterHtml);
+		return processedHtml;
 
 	}
 
