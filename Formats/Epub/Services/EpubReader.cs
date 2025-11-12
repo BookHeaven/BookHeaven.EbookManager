@@ -544,29 +544,32 @@ public partial class EpubReader : IEbookReader
 				if (string.IsNullOrEmpty(src)) continue;
 				var imageBytes = await LoadImageAsBytes(src);
 
-				if (!string.IsNullOrWhiteSpace(Globals.CachePath))
-				{
-					try
-					{
-						var hash = Convert.ToHexStringLower(SHA256.HashData(imageBytes));
-						var imagePath = Path.Combine(Globals.CachePath, _cacheFolderName, hash + Path.GetExtension(src));
-						if (!File.Exists(imagePath))
-						{
-							Directory.CreateDirectory(Path.Combine(Globals.CachePath, _cacheFolderName));
-							await File.WriteAllBytesAsync(imagePath, imageBytes);
-						}
-						imageNode.SetAttributeValue(attributeName, "/cache/" + _cacheFolderName + "/" + hash + Path.GetExtension(src));
-					}
-					catch
-					{
-						imageNode.SetAttributeValue(attributeName, $"data:image/png;base64,{Convert.ToBase64String(imageBytes)}");
-					}
+				// Remove caching for now
+				//if (!string.IsNullOrWhiteSpace(Globals.CachePath))
+				//{
+				//	try
+				//	{
+				//		var hash = Convert.ToHexStringLower(SHA256.HashData(imageBytes));
+				//		var imagePath = Path.Combine(Globals.CachePath, _cacheFolderName, hash + Path.GetExtension(src));
+				//		if (!File.Exists(imagePath))
+				//		{
+				//			Directory.CreateDirectory(Path.Combine(Globals.CachePath, _cacheFolderName));
+				//			await File.WriteAllBytesAsync(imagePath, imageBytes);
+				//		}
+				//		imageNode.SetAttributeValue(attributeName, "/cache/" + _cacheFolderName + "/" + hash + Path.GetExtension(src));
+				//	}
+				//	catch
+				//	{
+				//		imageNode.SetAttributeValue(attributeName, $"data:image/png;base64,{Convert.ToBase64String(imageBytes)}");
+				//	}
 					
-				}
-				else
-				{
-					imageNode.SetAttributeValue(attributeName, $"data:image/png;base64,{Convert.ToBase64String(imageBytes)}");
-				}
+				//}
+				//else
+				//{
+				//	imageNode.SetAttributeValue(attributeName, $"data:image/png;base64,{Convert.ToBase64String(imageBytes)}");
+				//}
+
+				imageNode.SetAttributeValue(attributeName, $"data:image/png;base64,{Convert.ToBase64String(imageBytes)}");
 				
 				if (imageNode.Attributes.Contains("class"))
 				{
