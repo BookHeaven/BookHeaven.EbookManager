@@ -29,11 +29,13 @@ public static class XElementExtensions
     
     public static void SetMetaItem(this XElement parentElement, string elementName, string value, int version, string? refines = null)
 	{
-		var element = parentElement.Descendants().FirstOrDefault(x => x.Name.LocalName == "meta" && x.Attribute("name")?.Value == elementName || x.Attribute("property")?.Value == elementName);
+		var element = parentElement.Descendants().FirstOrDefault(x =>
+			x.Name.LocalName == "meta" &&
+			(x.Attribute("name")?.Value == elementName || x.Attribute("property")?.Value == elementName));
 		element?.Remove();
 
-		
-		element = new XElement(XName.Get("meta", Namespaces.Opf));
+		var metaName = parentElement.Name.Namespace + "meta";
+		element = new XElement(metaName);
 			
 		if (version == 3)
 		{

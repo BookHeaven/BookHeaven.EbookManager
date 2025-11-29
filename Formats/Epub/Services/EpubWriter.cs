@@ -29,6 +29,8 @@ public class EpubWriter : IEbookWriter
 		var package = XDocument.Parse(opf.xml);
 		var version = int.TryParse(package.Root?.Attribute("version")?.Value, NumberStyles.Any, CultureInfo.InvariantCulture, out var v) ? v : 2;
 		var metadataElement = package.Descendants().First(x => x.Name.LocalName == "metadata");
+		
+		metadataElement.SetAttributeValue(XNamespace.Xmlns + "opf", null);
 			
 		metadataElement.SetItem(Namespaces.Dc, "title", ebook.Title);
 		var authorItem = metadataElement.SetItem(Namespaces.Dc, "creator", ebook.Author);
@@ -61,11 +63,11 @@ public class EpubWriter : IEbookWriter
 			metadataElement.SetMetaItem("calibre:series", ebook.Series, version);
 			metadataElement.SetMetaItem("calibre:series_index", ebook.SeriesIndex?.ToString("0.##", CultureInfo.InvariantCulture)!, version);
 		}
-		
 
-		using var archive = ZipFile.Open(bookPath, ZipArchiveMode.Update);
+
+		await using var archive = await ZipFile.OpenAsync(bookPath, ZipArchiveMode.Update);
 		var packageEntry = archive.GetEntry(opf.path)!;
-		await using var stream = packageEntry.Open();
+		await using var stream = await packageEntry.OpenAsync();
 		stream.SetLength(0);
 		var bytes = Encoding.UTF8.GetBytes(package.ToString());
 		await stream.WriteAsync(bytes);
@@ -94,10 +96,10 @@ public class EpubWriter : IEbookWriter
 
 		//Replace cover
 		var imageAsBytes = await File.ReadAllBytesAsync(newCoverPath);
-		using var archive = ZipFile.Open(bookPath, ZipArchiveMode.Update);
+		await using var archive = await ZipFile.OpenAsync(bookPath, ZipArchiveMode.Update);
 		var coverEntry = archive.GetEntry(Path.Combine(rootFolder, coverPath).Replace("\\", "/"));
 		if (coverEntry == null) return;
-		await using var stream = coverEntry.Open();
+		await using var stream = await coverEntry.OpenAsync();
 		stream.SetLength(0);
 		await stream.WriteAsync(imageAsBytes);
 	}
