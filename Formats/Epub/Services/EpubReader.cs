@@ -98,7 +98,7 @@ public partial class EpubReader : IEbookReader
 	/// <returns>OPF path</returns>
 	public async Task<string> GetOpfPathAsync(string epubPath)
 	{
-		_zipArchive = ZipFile.OpenRead(epubPath);
+		_zipArchive = await ZipFile.OpenReadAsync(epubPath);
 		_zipLock = new(1, 1);
 		var container = await ReadEntryAsync<Container>("META-INF/container.xml");
 		var rootFile = container.RootFiles.RootFile.First();
@@ -152,7 +152,7 @@ public partial class EpubReader : IEbookReader
 	{
 		var entry = _zipArchive!.GetEntry(GetAbsolutePath(path)!) ?? throw new Exception($"File not found inside epub. {GetAbsolutePath(path)}");
 
-		await using var stream = entry.Open();
+		await using var stream = await entry.OpenAsync();
 		var serializer = GetSerializer<T>();
 		try
 		{
@@ -214,7 +214,7 @@ public partial class EpubReader : IEbookReader
 			var entry = _zipArchive!.GetEntry(absolutePath);
 			if (entry == null) return [];
 
-			await using var stream = entry.Open();
+			await using var stream = await entry.OpenAsync();
 			await stream.CopyToAsync(memory);
 		}
 		finally
@@ -612,7 +612,7 @@ public partial class EpubReader : IEbookReader
 		try
 		{
 			var entry = _zipArchive!.GetEntry(absolutePath) ?? throw new Exception($"Could not load file: {path}");
-			await using var stream = entry.Open();
+			await using var stream = await entry.OpenAsync();
 			await stream.CopyToAsync(memory);
 		}
 		finally
