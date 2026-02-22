@@ -1,3 +1,5 @@
+using System;
+using System.IO;
 using BookHeaven.EbookManager.Abstractions;
 using BookHeaven.EbookManager.Enums;
 using BookHeaven.EbookManager.Formats.Epub.Services;
@@ -12,10 +14,18 @@ public static class DependencyInjection
     /// Registers the EpubManager services
     /// </summary>
     /// <param name="services"></param>
-    /// <param name="cachePath"></param>
-    public static IServiceCollection AddEbookManager(this IServiceCollection services, string cachePath = "")
+    /// <param name="ebookManagerOptions">Options for the EpubManager</param>
+    public static IServiceCollection AddEbookManager(this IServiceCollection services, Action<EbookManagerOptions>? ebookManagerOptions = null)
     {
-        Globals.CachePath = cachePath;
+        var options = new EbookManagerOptions();
+        ebookManagerOptions?.Invoke(options);
+
+        if (!string.IsNullOrWhiteSpace(options.CachePath))
+        {
+            Directory.CreateDirectory(options.CachePath);
+            Globals.CachePath = options.CachePath;
+        }
+        
         services.AddReaders();
         services.AddWriters();
         services.AddTransient<EbookManagerProvider>();
@@ -33,4 +43,9 @@ public static class DependencyInjection
         services.AddKeyedTransient<IEbookWriter, EpubWriter>(Format.Epub);
         services.AddKeyedTransient<IEbookWriter, PdfWriter>(Format.Pdf);
     }
+}
+
+public class EbookManagerOptions
+{
+    public string CachePath { get; set; } = string.Empty;
 }
