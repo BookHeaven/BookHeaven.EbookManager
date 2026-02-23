@@ -43,7 +43,7 @@ public partial class EpubReader : IEbookReader
 	
 	public async Task<Ebook> ReadAllAsync(string path)
 	{
-		if (!string.IsNullOrWhiteSpace(Globals.CachePath))
+		if (!string.IsNullOrWhiteSpace(EbookManagerGlobals.CachePath))
 		{
 			_cacheFolderName = Path.GetFileNameWithoutExtension(path);
 		}

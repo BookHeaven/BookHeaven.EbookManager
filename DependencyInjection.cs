@@ -23,7 +23,7 @@ public static class DependencyInjection
         if (!string.IsNullOrWhiteSpace(options.CachePath))
         {
             Directory.CreateDirectory(options.CachePath);
-            Globals.CachePath = options.CachePath;
+            EbookManagerGlobals.CachePath = options.CachePath;
         }
         
         services.AddReaders();
