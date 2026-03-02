@@ -378,16 +378,12 @@ public partial class EpubReader : IEbookReader
 		{
 			var item = _package!.Manifest.Items.First(x => x.Id == itemRef.IdRef);
 			var content = await LoadFileContentAsync(item.Href);
-
-			var chapterContent = content;
 			
 			var document = new HtmlDocument();
 			document.LoadHtml(content);
 			
 			var bodyNode = document.QuerySelector("body");
-			if (bodyNode != null)			{
-				chapterContent = bodyNode.InnerHtml;
-			}
+			var chapterContent = bodyNode is not null ? bodyNode.InnerHtml : content;
 			
 			return new Chapter
 			{
