@@ -378,17 +378,25 @@ public partial class EpubReader : IEbookReader
 		{
 			var item = _package!.Manifest.Items.First(x => x.Id == itemRef.IdRef);
 			var content = await LoadFileContentAsync(item.Href);
+
+			var chapterContent = content;
 			
 			var document = new HtmlDocument();
 			document.LoadHtml(content);
+			
+			var bodyNode = document.QuerySelector("body");
+			if (bodyNode != null)			{
+				chapterContent = bodyNode.InnerHtml;
+			}
+			
 			return new Chapter
 			{
 				Identifier = item.Id,
-				Content = content,
+				Content = chapterContent,
 				Title = GetTitleFromHtml(document),
-				Weight = GetWordCount(content),
+				Weight = GetWordCount(chapterContent),
 				Stylesheets = GetStylesheetsFromHtml(document),
-				ParagraphClassName = GetParagraphClass(content)
+				ParagraphClassName = GetParagraphClass(chapterContent)
 			};
 		}));
 
