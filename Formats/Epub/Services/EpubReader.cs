@@ -4,8 +4,6 @@ using System.Collections.Generic;
 using System.IO;
 using System.IO.Compression;
 using System.Linq;
-using System.Security.Cryptography;
-using System.Text;
 using System.Text.RegularExpressions;
 using System.Threading;
 using System.Threading.Tasks;
@@ -251,9 +249,6 @@ public partial class EpubReader : IEbookReader
 			};
 		}
 
-		content.Chapters = await MapSpineToChapters();
-
-
 		if (_package.Manifest.Items.Any(i => i.Properties == "nav"))
 		{
 			// V3 NAV TOC
@@ -285,6 +280,8 @@ public partial class EpubReader : IEbookReader
 		}
 
 		content.TableOfContents = tableOfContents;
+		
+		content.Chapters = await MapSpineToChapters(tocContainsId: id => content.GetChapterFromTableOfContents(id) is not null);
 
 		return content;
 
@@ -372,31 +369,56 @@ public partial class EpubReader : IEbookReader
 	/// Maps the spine to a list of SpineItem
 	/// </summary>
 	/// <returns></returns>
-	private async Task<List<Chapter>> MapSpineToChapters()
+	private async Task<List<Chapter>> MapSpineToChapters(Func<string, bool> tocContainsId)
 	{
 		var items = await Task.WhenAll(_package!.Spine.ItemRefs.Select(async itemRef =>
 		{
 			var item = _package!.Manifest.Items.First(x => x.Id == itemRef.IdRef);
 			var content = await LoadFileContentAsync(item.Href);
 			
-			var document = new HtmlDocument();
-			document.LoadHtml(content);
-			
-			var bodyNode = document.QuerySelector("body");
-			var chapterContent = bodyNode is not null ? bodyNode.InnerHtml : content;
-			
-			return new Chapter
-			{
-				Identifier = item.Id,
-				Content = chapterContent,
-				Title = GetTitleFromHtml(document),
-				Weight = GetWordCount(chapterContent),
-				Stylesheets = GetStylesheetsFromHtml(document),
-				ParagraphClassName = GetParagraphClass(chapterContent)
-			};
+			return (item.Id, content);
 		}));
+		
+		var chapters = new List<Chapter>();
+		var lastChapterId = string.Empty;
+		
+		foreach (var item in items)
+		{
+			var document = new HtmlDocument();
+			document.LoadHtml(item.content);
+			var stylesheets = GetStylesheetsFromHtml(document);
+			var bodyNode = document.QuerySelector("body");
+			var chapterContent = bodyNode is not null ? bodyNode.InnerHtml : item.content;
 
-		return items.ToList();
+			if (tocContainsId(item.Id))
+			{
+				lastChapterId = item.Id;
+				chapters.Add(new Chapter
+				{
+					Identifier = item.Id,
+					Content = chapterContent,
+					Title = GetTitleFromHtml(document),
+					Weight = GetWordCount(chapterContent),
+					Stylesheets = stylesheets,
+					ParagraphClassName = GetParagraphClass(chapterContent)
+				});
+			}
+			else
+			{
+				var lastChapter = chapters.FirstOrDefault(c => c.Identifier == lastChapterId);
+				if (lastChapter is null) continue;
+				lastChapter.Content += chapterContent;
+				lastChapter.Weight = GetWordCount(lastChapter.Content);
+				lastChapter.ParagraphClassName = GetParagraphClass(chapterContent);
+				foreach (var stylesheet in stylesheets.Where(stylesheet => !lastChapter.Stylesheets.Contains(stylesheet)))
+				{
+					lastChapter.Stylesheets.Add(stylesheet);
+				}
+			}
+			
+		}
+
+		return chapters;
 	}
 
 	/// <summary>
