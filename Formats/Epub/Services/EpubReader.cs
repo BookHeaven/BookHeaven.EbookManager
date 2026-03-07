@@ -350,6 +350,11 @@ public partial class EpubReader : IEbookReader
 		var entries = new List<TocEntry>();
 		foreach (var navItem in navItems)
 		{
+			if (_coverPath is not null && _coverPath.EndsWith(CleanPath(navItem.Link.Href) ?? " "))
+			{
+				continue;
+			}
+			
 			var chapter = new TocEntry
 			{
 				Title = navItem.Link.Text,
