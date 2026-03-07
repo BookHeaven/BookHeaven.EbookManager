@@ -318,7 +318,7 @@ public partial class EpubReader : IEbookReader
 		var entries = new List<TocEntry>();
 		foreach (var navPoint in navpoints)
 		{
-			if (_coverPath != null && CleanPath(navPoint.Content?.Src) == _coverPath)
+			if (_coverPath is not null && _coverPath.EndsWith(CleanPath(navPoint.Content?.Src) ?? " "))
 			{
 				continue;
 			}
@@ -326,7 +326,7 @@ public partial class EpubReader : IEbookReader
 			var chapter = new TocEntry
 			{
 				Title = navPoint.NavLabel?.Text,
-				Id = _package!.Manifest.Items.FirstOrDefault(x => x.Href == CleanPath(navPoint.Content?.Src))?.Id
+				Id = _package!.Manifest.Items.FirstOrDefault(x => x.Href.EndsWith(CleanPath(navPoint.Content?.Src) ?? " "))?.Id
 			};
 
 			if (navPoint.NavPoints.Count > 0)
@@ -353,7 +353,7 @@ public partial class EpubReader : IEbookReader
 			var chapter = new TocEntry
 			{
 				Title = navItem.Link.Text,
-				Id = _package!.Manifest.Items.FirstOrDefault(x => x.Href == CleanPath(navItem.Link.Href))?.Id
+				Id = _package!.Manifest.Items.FirstOrDefault(x => x.Href.EndsWith(CleanPath(navItem.Link.Href) ?? " "))?.Id
 			};
 			
 			if(navItem.ChapterList.Count > 0)
