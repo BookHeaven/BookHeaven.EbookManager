@@ -31,7 +31,7 @@ internal static partial class HtmlManager
     
     private static readonly List<CssProperty> CustomStyles =
     [
-        new() { Property = "line-height", CssVariable= "var(--line-height)", CssUnit = "em", Mode = CssEditMode.Add },
+        new() { Property = "line-height", CssVariable= "var(--line-height)", Mode = CssEditMode.Replace },
         new() { Property = "text-indent", CssVariable= "var(--text-indent)", CssUnit = "em", Mode = CssEditMode.Replace },
         new() { Property = "margin-top", CssVariable= "var(--paragraph-spacing)", CssUnit = "pt", Mode = CssEditMode.Max },
         new() { Property = "margin-bottom", CssVariable= "var(--paragraph-spacing)", CssUnit = "pt", Mode = CssEditMode.Max },
@@ -71,7 +71,7 @@ internal static partial class HtmlManager
                         var values = value.Split(' ').Select(v => v.Trim()).ToList();
                         var processedValues = values.Select(val =>
                         {
-                            if (!IsAboveZero(val))
+                            if (val != "inherit" && !IsAboveZero(val))
                                 return val;
                             return cSsProperty.Mode switch
                             {
