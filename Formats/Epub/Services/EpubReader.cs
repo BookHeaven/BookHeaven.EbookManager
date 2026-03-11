@@ -20,6 +20,13 @@ using HtmlAgilityPack.CssSelectors.NetCore;
 namespace BookHeaven.EbookManager.Formats.Epub.Services;
 public partial class EpubReader : IEbookReader
 {
+	private static readonly ConcurrentDictionary<Type, XmlSerializer> Serializers = [];
+	private static readonly XmlReaderSettings XmlReaderSettings = new()
+	{
+		DtdProcessing = DtdProcessing.Parse,
+		Async = true
+	};
+	
 	private ZipArchive? _zipArchive;
 	private SemaphoreSlim? _zipLock;
 
@@ -31,8 +38,6 @@ public partial class EpubReader : IEbookReader
 	
 	private readonly ConcurrentDictionary<string, string> _contentCache = new();
 	private readonly ConcurrentDictionary<string, byte[]> _imageCache = new();
-
-	private readonly Dictionary<Type, XmlSerializer> _serializers = [];
 
 	public async Task<Ebook> ReadMetadataAsync(string path)
 	{
@@ -103,17 +108,6 @@ public partial class EpubReader : IEbookReader
 		return rootFile.FullPath;
 	}
 
-	private XmlSerializer GetSerializer<T>()
-	{
-		var type = typeof(T);
-		if (!_serializers.TryGetValue(type, out var value))
-		{
-			value = new XmlSerializer(type);
-			_serializers[type] = value;
-		}
-		return value;
-	}
-
 	/// <summary>
 	/// Returns the absolute path of a file inside the epub
 	/// </summary>
@@ -151,16 +145,10 @@ public partial class EpubReader : IEbookReader
 		var entry = _zipArchive!.GetEntry(GetAbsolutePath(path)!) ?? throw new Exception($"File not found inside epub. {GetAbsolutePath(path)}");
 
 		await using var stream = await entry.OpenAsync();
-		var serializer = GetSerializer<T>();
+		var serializer = Serializers.GetOrAdd(typeof(T), t => new XmlSerializer(t));
 		try
 		{
-			// Configure XML reader settings to enable DTD processing
-			var readerSettings = new XmlReaderSettings
-			{
-				DtdProcessing = DtdProcessing.Parse
-			};
-
-			using var reader = XmlReader.Create(stream, readerSettings);
+			using var reader = XmlReader.Create(stream, XmlReaderSettings);
 			return (T)serializer.Deserialize(reader)!;
 		}
 		catch (Exception e)
@@ -668,7 +656,7 @@ public partial class EpubReader : IEbookReader
 		var content = await LoadFileContentAsync(path);
 		var doc = XDocument.Parse(content);
 		var navElement = doc.Descendants().First(x => x.Name.LocalName == "body").Descendants().First(x => x.Name.LocalName == "nav");
-		var serializer = GetSerializer<Nav>();
+		var serializer = Serializers.GetOrAdd(typeof(Nav), t => new XmlSerializer(t));
 		using var reader = navElement.CreateReader();
 		return (Nav)serializer.Deserialize(reader)!;
 	}
