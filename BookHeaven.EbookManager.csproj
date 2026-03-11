@@ -7,6 +7,7 @@
         <PackageId>BookHeaven.EbookManager</PackageId>
         <Authors>Guillem Garrido</Authors>
         <RepositoryUrl>https://github.com/BookHeaven/BookHeaven.EpubManager</RepositoryUrl>
+        <ImplicitUsings>true</ImplicitUsings>
         <TreatWarningsAsErrors>true</TreatWarningsAsErrors>
     </PropertyGroup>
 
