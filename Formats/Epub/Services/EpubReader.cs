@@ -37,7 +37,7 @@ public partial class EpubReader : IEbookReader
 	private string? _coverPath;
 	
 	private readonly ConcurrentDictionary<string, string> _contentCache = new();
-	private readonly ConcurrentDictionary<string, byte[]> _imageCache = new();
+	private readonly ConcurrentDictionary<string, byte[]> _images = new();
 
 	public async Task<Ebook> ReadMetadataAsync(string path)
 	{
@@ -188,7 +188,7 @@ public partial class EpubReader : IEbookReader
 
 		var absolutePath = GetAbsolutePath(path)!;
 
-		if (_imageCache.TryGetValue(absolutePath, out var cachedImage))
+		if (_images.TryGetValue(absolutePath, out var cachedImage))
 		{
 			return cachedImage;
 		}
@@ -209,7 +209,7 @@ public partial class EpubReader : IEbookReader
 		}
 
 		var bytes = memory.ToArray();
-		_imageCache[absolutePath] = bytes;
+		_images[absolutePath] = bytes;
 		return bytes;
 	}
 
@@ -679,7 +679,7 @@ public partial class EpubReader : IEbookReader
 	    _package = null;
 	    _coverPath = null;
 	    _contentCache.Clear();
-	    _imageCache.Clear();
+	    _images.Clear();
 	    _zipArchive?.Dispose();
 	    _zipLock?.Dispose();
 	    GC.SuppressFinalize(this);
