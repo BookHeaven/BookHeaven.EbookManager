@@ -1,19 +1,13 @@
-﻿using System;
-using System.Collections.Concurrent;
-using System.Collections.Generic;
-using System.IO;
+﻿using System.Collections.Concurrent;
 using System.IO.Compression;
-using System.Linq;
 using System.Text.RegularExpressions;
-using System.Threading;
-using System.Threading.Tasks;
 using System.Xml;
 using System.Xml.Linq;
 using System.Xml.Serialization;
 using BookHeaven.EbookManager.Abstractions;
 using BookHeaven.EbookManager.Entities;
-using BookHeaven.EbookManager.Formats.Epub.XML;
 using BookHeaven.EbookManager.Extensions;
+using BookHeaven.EbookManager.Formats.Epub.XML;
 using HtmlAgilityPack;
 using HtmlAgilityPack.CssSelectors.NetCore;
 
