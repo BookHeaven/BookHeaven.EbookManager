@@ -1,14 +1,11 @@
 ﻿using System.Globalization;
-using System.IO;
 using System.IO.Compression;
-using System.Linq;
 using System.Text;
-using System.Threading.Tasks;
 using System.Xml.Linq;
 using BookHeaven.EbookManager.Abstractions;
 using BookHeaven.EbookManager.Entities;
-using BookHeaven.EbookManager.Formats.Epub.Constants;
 using BookHeaven.EbookManager.Extensions;
+using BookHeaven.EbookManager.Formats.Epub.Constants;
 
 namespace BookHeaven.EbookManager.Formats.Epub.Services;
 

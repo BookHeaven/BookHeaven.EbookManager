@@ -1,10 +1,10 @@
-﻿using System;
-using System.IO;
-using System.Threading.Tasks;
-using BookHeaven.EbookManager.Abstractions;
+﻿using BookHeaven.EbookManager.Abstractions;
 using BookHeaven.EbookManager.Entities;
 using iText.IO.Image;
+using iText.Kernel.Geom;
 using iText.Kernel.Pdf;
+using iText.Kernel.Pdf.Canvas;
+using Path = System.IO.Path;
 
 namespace BookHeaven.EbookManager.Formats.Pdf.Services;
 
@@ -42,8 +42,8 @@ public class PdfWriter : IEbookWriter
         {
             var coverImage = ImageDataFactory.Create(newCoverPath);
             var pageSize = srcDoc.GetFirstPage().GetPageSize();
-            var coverPage = destDoc.AddNewPage(new iText.Kernel.Geom.PageSize(pageSize));
-            var pdfCanvas = new iText.Kernel.Pdf.Canvas.PdfCanvas(coverPage);
+            var coverPage = destDoc.AddNewPage(new PageSize(pageSize));
+            var pdfCanvas = new PdfCanvas(coverPage);
             pdfCanvas.AddImageFittedIntoRectangle(coverImage, pageSize, false);
             srcDoc.CopyPagesTo(2, srcDoc.GetNumberOfPages(), destDoc);
         });

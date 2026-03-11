@@ -1,5 +1,3 @@
-using System;
-using System.IO;
 using BookHeaven.EbookManager.Abstractions;
 using BookHeaven.EbookManager.Enums;
 using BookHeaven.EbookManager.Formats.Epub.Services;

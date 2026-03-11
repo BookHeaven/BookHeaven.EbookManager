@@ -1,5 +1,4 @@
 ﻿using System.Globalization;
-using System.Linq;
 using BookHeaven.EbookManager.Entities;
 using BookHeaven.EbookManager.Formats.Epub.XML;
 using Identifier = BookHeaven.EbookManager.Entities.Identifier;

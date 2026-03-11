@@ -1,13 +1,8 @@
-﻿using System;
-using System.Collections.Generic;
-using System.IO;
-using System.Linq;
-using System.Threading.Tasks;
-using BookHeaven.EbookManager.Abstractions;
+﻿using BookHeaven.EbookManager.Abstractions;
 using BookHeaven.EbookManager.Entities;
 using BookHeaven.EbookManager.Enums;
-using BookHeaven.EbookManager.Formats.Pdf.Entities;
 using BookHeaven.EbookManager.Formats.Pdf.Converters;
+using BookHeaven.EbookManager.Formats.Pdf.Entities;
 using iText.Kernel.Pdf;
 using iText.Kernel.Pdf.Canvas.Parser;
 using iText.Kernel.Pdf.Canvas.Parser.Data;
@@ -33,7 +28,7 @@ public class PdfReader : IEbookReader
         processor.ProcessPageContent(coverPage);
         ebook.Cover = listener.FirstImageBytes;
 
-        ebook.Title = pdfDocument.GetDocumentInfo().GetTitle() ?? System.IO.Path.GetFileNameWithoutExtension(path);
+        ebook.Title = pdfDocument.GetDocumentInfo().GetTitle() ?? Path.GetFileNameWithoutExtension(path);
         ebook.Author = pdfDocument.GetDocumentInfo().GetAuthor() ?? "Unknown";
         ebook.Synopsis = pdfDocument.GetDocumentInfo().GetSubject();
         ebook.Pages = pdfDocument.GetNumberOfPages();

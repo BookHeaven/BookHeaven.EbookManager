@@ -1,8 +1,4 @@
-﻿using System;
-using System.Collections.Generic;
-using System.IO;
-using System.Linq;
-using System.Security.Cryptography;
+﻿using System.Security.Cryptography;
 using System.Text;
 using BookHeaven.EbookManager.Formats.Pdf.Entities;
 using BookHeaven.EbookManager.Formats.Pdf.Parsers;

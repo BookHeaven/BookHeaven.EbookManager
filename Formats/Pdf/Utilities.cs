@@ -1,5 +1,4 @@
-﻿using System;
-using BookHeaven.EbookManager.Formats.Pdf.Enums;
+﻿using BookHeaven.EbookManager.Formats.Pdf.Enums;
 
 namespace BookHeaven.EbookManager.Formats.Pdf;
 

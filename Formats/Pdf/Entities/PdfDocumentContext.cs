@@ -1,5 +1,4 @@
-﻿using System.IO;
-using iText.Kernel.Pdf;
+﻿using iText.Kernel.Pdf;
 
 namespace BookHeaven.EbookManager.Formats.Pdf.Entities;
 

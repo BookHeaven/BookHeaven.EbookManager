@@ -1,8 +1,5 @@
-﻿using System;
-using System.Collections.Generic;
-using System.Text;
+﻿using System.Text;
 using System.Text.RegularExpressions;
-using System.Threading.Tasks;
 using BookHeaven.EbookManager.Formats.Pdf.Entities;
 using BookHeaven.EbookManager.Formats.Pdf.EventListeners;
 using iText.Kernel.Pdf.Canvas.Parser;
