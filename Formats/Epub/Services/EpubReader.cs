@@ -160,12 +160,10 @@ public partial class EpubReader : IEbookReader
 		var cover = 
 			_package?.Manifest.Items.FirstOrDefault(item => item.Id == _package?.Metadata.Meta.FirstOrDefault(x => x.Name == "cover")?.Content) 
 			?? _package?.Manifest.Items.FirstOrDefault(x => x.Properties == "cover-image");
-		if(cover is null)
-		{
-			throw new Exception("Cover path not found");
-		}
 
-		return await LoadImageAsBytes(cover.Href);
+		return cover is null 
+			? null 
+			: await LoadImageAsBytes(cover.Href);
 	}
 
 	/// <summary>
