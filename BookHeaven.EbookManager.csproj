@@ -15,14 +15,14 @@
     <ItemGroup>
         <PackageReference Include="HtmlAgilityPack" Version="1.12.4" />
         <PackageReference Include="HtmlAgilityPack.CssSelectors.NetCore" Version="1.2.1" />
-        <PackageReference Include="itext" Version="9.6.0" />
-        <PackageReference Include="itext.bouncy-castle-adapter" Version="9.6.0" />
-        <PackageReference Include="Microsoft.Extensions.DependencyInjection.Abstractions" Version="10.0.9" />
-        <PackageReference Include="Nerdbank.GitVersioning" Version="3.9.50">
+        <PackageReference Include="itext" Version="9.7.0" />
+        <PackageReference Include="itext.bouncy-castle-adapter" Version="9.7.0" />
+        <PackageReference Include="Microsoft.Extensions.DependencyInjection.Abstractions" Version="10.0.10" />
+        <PackageReference Include="Nerdbank.GitVersioning" Version="3.10.91">
             <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
             <PrivateAssets>all</PrivateAssets>
         </PackageReference>
         <PackageReference Include="Newtonsoft.Json" Version="13.0.4" />
-        <PackageReference Include="SkiaSharp" Version="3.119.4" />
+        <PackageReference Include="SkiaSharp" Version="4.151.0" />
     </ItemGroup>
 </Project>
