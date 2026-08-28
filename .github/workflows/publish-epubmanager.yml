@@ -28,6 +28,9 @@ jobs:
         uses: actions/setup-dotnet@v6
         with:
           dotnet-version: '10.x'
+          source-url: https://nuget.pkg.github.com/BookHeaven/index.json
+        env:
+          NUGET_AUTH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
       # Extract version from GitVersioning
       - name: Get version
@@ -41,11 +44,6 @@ jobs:
       - name: Publish NuGet package
         run: |
           dotnet pack ./BookHeaven.EbookManager.csproj --configuration Release --output ./packages /p:Version=$VERSION
-          dotnet nuget add source \
-            --username ${{ github.actor }} \
-            --password ${{ secrets.GITHUB_TOKEN }} \
-            --store-password-in-clear-text \
-            --name github "https://nuget.pkg.github.com/BookHeaven/index.json"
           dotnet nuget push ./packages/BookHeaven.EbookManager.$VERSION.nupkg \
             --source "github" \
             --api-key ${{ secrets.GITHUB_TOKEN }}
