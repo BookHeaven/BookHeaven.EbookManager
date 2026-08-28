@@ -45,5 +45,5 @@ jobs:
         run: |
           dotnet pack ./BookHeaven.EbookManager.csproj --configuration Release --output ./packages /p:Version=$VERSION
           dotnet nuget push ./packages/BookHeaven.EbookManager.$VERSION.nupkg \
-            --source "github" \
+            --source "https://nuget.pkg.github.com/BookHeaven/index.json" \
             --api-key ${{ secrets.GITHUB_TOKEN }}
