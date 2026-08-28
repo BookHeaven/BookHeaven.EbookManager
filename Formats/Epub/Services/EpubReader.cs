@@ -448,7 +448,7 @@ public partial class EpubReader : IEbookReader
 	private static List<string> GetStylesheetsFromHtml(HtmlDocument document)
 	{
 		var linkNodes = document.QuerySelectorAll("link[href]");
-		return linkNodes == null ? [] : linkNodes.Select(link => link.Attributes["href"].Value).ToList();
+		return linkNodes is null ? [] : linkNodes.Select(link => link.GetAttributeValue("href", "")).ToList();
 	}
 
 	/// <summary>
@@ -509,7 +509,7 @@ public partial class EpubReader : IEbookReader
 		{
 			foreach (var divNode in divWithImageNodes)
 			{
-				divNode.ParentNode.SetAttributeValue("style", "margin: 0 auto;text-align:center;");
+				divNode.ParentNode?.SetAttributeValue("style", "margin: 0 auto;text-align:center;");
 			}
 		}
 		
@@ -521,21 +521,14 @@ public partial class EpubReader : IEbookReader
 			var elementsToRemove = new List<HtmlNode> { span };
 
 			var parent = span.ParentNode;
-			while (parent.Name != "p")
+			while (parent?.Name != "p")
 			{
+				if(parent is null) break;
 				elementsToRemove.Add(parent);
 				parent = parent.ParentNode;
 			}
+			parent!.SetAttributeValue("class", (parent.Attributes["class"]?.Value ?? "") + " drop-cap");
 			
-			if (parent.Attributes.Contains("class"))
-			{
-				parent.Attributes["class"].Value += " drop-cap";
-			}
-			else
-			{
-				parent.SetAttributeValue("class", "drop-cap");
-			}
-
 			foreach (var node in elementsToRemove)
 			{
 				node.Remove();
@@ -581,15 +574,7 @@ public partial class EpubReader : IEbookReader
 				//}
 
 				imageNode.SetAttributeValue(attributeName, $"data:image/png;base64,{Convert.ToBase64String(imageBytes)}");
-				
-				if (imageNode.Attributes.Contains("class"))
-				{
-					imageNode.Attributes["class"].Value += " zoomable";
-				}
-				else
-				{
-					imageNode.SetAttributeValue("class", "zoomable");
-				}
+				imageNode.SetAttributeValue("class", (imageNode.Attributes["class"]?.Value ?? "") + " zoomable");
 			}
 		}
 
