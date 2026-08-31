@@ -1,4 +1,7 @@
-﻿using System.Text.RegularExpressions;
+﻿using System.Security.Cryptography;
+using System.Text.RegularExpressions;
+using HtmlAgilityPack;
+using HtmlAgilityPack.CssSelectors.NetCore;
 
 namespace BookHeaven.EbookManager;
 
@@ -40,49 +43,157 @@ internal static partial class HtmlManager
         new() { Property = "padding-top", NewProperty = "margin-top",Mode = CssEditMode.ReplaceProperty},
         new() { Property = "padding-bottom", NewProperty = "margin-bottom",Mode = CssEditMode.ReplaceProperty}
     ];
+    
+    private static readonly Regex CssPropertyRegex = new(
+	    $@"(?<prop>{string.Join("|", CustomStyles.Select(static p => Regex.Escape(p.Property)))}):\s*(?<val>[^;}}]+?)(?<delim>;|}})",
+	    RegexOptions.Compiled | RegexOptions.CultureInvariant);
 
-    public static async Task<string> ApplyCssProcessing(string contentString)
+    private static readonly Dictionary<string, CssProperty> CssPropertyLookup =
+	    CustomStyles.ToDictionary(static p => p.Property, StringComparer.Ordinal);
+    
+    public static string ApplyCssProcessing(string contentString)
     {
-        // Offload the entire operation to a background thread to keep UI responsive on slow devices
-        return await Task.Run(() =>
+        if (string.IsNullOrEmpty(contentString))
+            return contentString;
+
+        return CssPropertyRegex.Replace(contentString, match =>
         {
-            // Build a single regex pattern for all properties
-            var propertyNames = CustomStyles.Select(p => Regex.Escape(p.Property)).ToArray();
-            var pattern = $@"(?<prop>{string.Join("|", propertyNames)}):\s*(?<val>[^;}}]+?)(?<delim>;|}})";
-            var regex = new Regex(pattern);
-
-            return regex.Replace(contentString, match =>
+            var property = match.Groups["prop"].Value;
+            if (!CssPropertyLookup.TryGetValue(property, out var cssProperty))
             {
-                var property = match.Groups["prop"].Value;
-                var value = match.Groups["val"].Value;
-                var delimiter = match.Groups["delim"].Value;
-                var cSsProperty = CustomStyles.First(p => p.Property == property);
+                return match.Value;
+            }
 
-                switch (cSsProperty.Mode)
-                {
-                    case CssEditMode.Remove:
-                        return string.Empty;
-                    case CssEditMode.ReplaceProperty:
-                        return $"{cSsProperty.NewProperty}: {value}{delimiter}";
-                    default:
-                        var values = value.Split(' ').Select(v => v.Trim()).ToList();
-                        var processedValues = values.Select(val =>
+            var value = match.Groups["val"].Value;
+            var delimiter = match.Groups["delim"].Value;
+
+            switch (cssProperty.Mode)
+            {
+                case CssEditMode.Remove:
+                    return string.Empty;
+
+                case CssEditMode.ReplaceProperty:
+                    return string.Concat(cssProperty.NewProperty, ": ", value, delimiter);
+
+                default:
+                    var values = value.Split(' ', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
+                    var processedValues = new string[values.Length];
+
+                    for (var i = 0; i < values.Length; i++)
+                    {
+                        var current = values[i];
+
+                        if (current != "inherit" && !IsAboveZero(current))
                         {
-                            if (val != "inherit" && !IsAboveZero(val))
-                                return val;
-                            return cSsProperty.Mode switch
-                            {
-                                CssEditMode.Replace => $"calc({cSsProperty.CssVariable} * 1{cSsProperty.CssUnit})",
-                                CssEditMode.Add => $"calc({EnsureUnit(val, cSsProperty.CssUnit!)} + ({cSsProperty.CssVariable} * 1{cSsProperty.CssUnit}))",
-                                CssEditMode.Max => $"max({val}, calc({cSsProperty.CssVariable} * 1{cSsProperty.CssUnit}))",
-                                _ => val
-                            };
-                        });
-                        return $"{property}: {string.Join(" ", processedValues)}{delimiter}";
-                }
-            });
+                            processedValues[i] = current;
+                            continue;
+                        }
+
+                        processedValues[i] = cssProperty.Mode switch
+                        {
+                            CssEditMode.Replace => $"calc({cssProperty.CssVariable} * 1{cssProperty.CssUnit})",
+                            CssEditMode.Add => $"calc({EnsureUnit(current, cssProperty.CssUnit!)} + ({cssProperty.CssVariable} * 1{cssProperty.CssUnit}))",
+                            CssEditMode.Max => $"max({current}, calc({cssProperty.CssVariable} * 1{cssProperty.CssUnit}))",
+                            _ => current
+                        };
+                    }
+
+                    return string.Concat(property, ": ", string.Join(" ", processedValues), delimiter);
+            }
         });
     }
+    
+    public static async Task<string> ApplyHtmlProcessingAsync(string content, Func<string, Task<byte[]>> loadImageAsBytes, string? cacheFolder = null)
+	{
+		var doc = new HtmlDocument();
+		doc.LoadHtml(content);
+		
+		var linkNodes = doc.QuerySelectorAll("link[rel='stylesheet']");
+		if (linkNodes != null)
+		{
+			foreach (var linkNode in linkNodes)
+			{
+				linkNode.Remove();
+			}
+		}
+		
+		
+		var divWithImageNodes = doc.QuerySelectorAll("div > img:first-child:last-child");
+		if (divWithImageNodes != null)
+		{
+			foreach (var divNode in divWithImageNodes)
+			{
+				divNode.ParentNode?.SetAttributeValue("style", "margin: 0 auto;text-align:center;");
+			}
+		}
+		
+		var spans = doc.QuerySelectorAll("p span:first-child");
+		foreach (var span in spans)
+		{
+			if(span is not { InnerText.Length: 1 }) continue;
+			var letter = span.InnerText;
+			var elementsToRemove = new List<HtmlNode> { span };
+
+			var parent = span.ParentNode;
+			while (parent?.Name != "p")
+			{
+				if(parent is null) break;
+				elementsToRemove.Add(parent);
+				parent = parent.ParentNode;
+			}
+			parent!.SetAttributeValue("class", (parent.Attributes["class"]?.Value ?? "") + " drop-cap");
+			
+			foreach (var node in elementsToRemove)
+			{
+				node.Remove();
+			}
+			parent.InnerHtml = letter + parent.InnerHtml;
+			break;
+		}
+		
+		var imageNodes = doc.QuerySelectorAll("img, image");
+		if (imageNodes != null)
+		{
+			foreach (var imageNode in imageNodes)
+			{
+				var attributeName = imageNode.Name == "img" ? "src" : "href";
+
+				var src = imageNode.Attributes.FirstOrDefault(a => a.Name == attributeName || a.Name.EndsWith(attributeName))?.Value;
+				if (string.IsNullOrEmpty(src)) continue;
+				var imageBytes = await loadImageAsBytes(src);
+				
+				if (!string.IsNullOrWhiteSpace(EbookManagerGlobals.CachePath) && !string.IsNullOrWhiteSpace(cacheFolder))
+				{
+					try
+					{
+						var hash = Convert.ToHexStringLower(SHA256.HashData(imageBytes));
+						var imagePath = Path.Combine(EbookManagerGlobals.CachePath, cacheFolder ?? "", hash + Path.GetExtension(src));
+						if (!File.Exists(imagePath))
+						{
+							Directory.CreateDirectory(Path.Combine(EbookManagerGlobals.CachePath, cacheFolder ?? ""));
+							await File.WriteAllBytesAsync(imagePath, imageBytes);
+						}
+						imageNode.SetAttributeValue(attributeName, BookHeavenScheme.BuildUrl("/cache/" + cacheFolder + "/" + hash + Path.GetExtension(src)));
+					}
+					catch
+					{
+						imageNode.SetAttributeValue(attributeName, $"data:image/png;base64,{Convert.ToBase64String(imageBytes)}");
+					}
+					
+				}
+				else
+				{
+					imageNode.SetAttributeValue(attributeName, $"data:image/png;base64,{Convert.ToBase64String(imageBytes)}");
+				}
+
+				// imageNode.SetAttributeValue(attributeName, $"data:image/png;base64,{Convert.ToBase64String(imageBytes)}");
+				imageNode.SetAttributeValue("class", (imageNode.Attributes["class"]?.Value ?? "") + " zoomable");
+			}
+		}
+
+		var processedHtml = ApplyCssProcessing(doc.DocumentNode.OuterHtml);
+		return processedHtml;
+	}
     
     private static bool IsAboveZero(string cssValue)
     {

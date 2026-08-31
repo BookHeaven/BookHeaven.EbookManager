@@ -1,5 +1,7 @@
 ﻿using System.Collections.Concurrent;
 using System.IO.Compression;
+using System.Net;
+using System.Text;
 using System.Text.RegularExpressions;
 using System.Xml;
 using System.Xml.Linq;
@@ -27,11 +29,13 @@ public partial class EpubReader : IEbookReader
 	private string _cacheFolderName = string.Empty;
 	private Package? _package;
 	private string? _rootFolder;
-	private readonly char[] _separator = [' ', '\n', '\r', '\t'];
 	private string? _coverPath;
 	
-	private readonly ConcurrentDictionary<string, string> _contentCache = new();
-	private readonly ConcurrentDictionary<string, byte[]> _images = new();
+	private readonly ConcurrentDictionary<string, string> _contentCache = new(StringComparer.OrdinalIgnoreCase);
+	private readonly ConcurrentDictionary<string, byte[]> _images = new(StringComparer.OrdinalIgnoreCase);
+	private readonly ConcurrentDictionary<string, ZipArchiveEntry?> _archiveEntries = new(StringComparer.OrdinalIgnoreCase);
+	private readonly ConcurrentDictionary<string, Lazy<Task<string>>> _contentLoaders = new(StringComparer.OrdinalIgnoreCase);
+	private readonly ConcurrentDictionary<string, Lazy<Task<byte[]>>> _imageLoaders = new(StringComparer.OrdinalIgnoreCase);
 
 	public async Task<Ebook> ReadMetadataAsync(string path)
 	{
@@ -98,7 +102,10 @@ public partial class EpubReader : IEbookReader
 		_zipArchive = await ZipFile.OpenReadAsync(epubPath);
 		_zipLock = new(1, 1);
 		var container = await ReadEntryAsync<Container>("META-INF/container.xml");
-		var rootFile = container.RootFiles.RootFile.First();
+		var rootFile = container.RootFiles.RootFile
+			.FirstOrDefault(x => string.Equals(x.MediaType, "application/oebps-package+xml", StringComparison.OrdinalIgnoreCase))
+			?? container.RootFiles.RootFile.FirstOrDefault()
+			?? throw new Exception("No OPF root file found in epub container.");
 		return rootFile.FullPath;
 	}
 
@@ -109,22 +116,61 @@ public partial class EpubReader : IEbookReader
 	/// <returns>Absolute path</returns>
 	private string? GetAbsolutePath(string? path)
 	{
-		if(string.IsNullOrEmpty(path))
+		if (string.IsNullOrWhiteSpace(path))
 		{
 			return null;
 		}
 
-		if (path.IndexOf("../", StringComparison.Ordinal) >= 0)
+		var normalizedPath = NormalizeArchivePath(path);
+		if (string.IsNullOrEmpty(normalizedPath))
 		{
-			path = path.Replace("../", "");
+			return null;
 		}
 
-		if (!string.IsNullOrEmpty(_rootFolder) && !path.StartsWith(_rootFolder))
+		if (!string.IsNullOrEmpty(_rootFolder))
 		{
-			path = _rootFolder + "/" + path;
+			var rootFolder = NormalizeArchivePath(_rootFolder);
+			if (!string.IsNullOrEmpty(rootFolder)
+				&& !normalizedPath.StartsWith(rootFolder + "/", StringComparison.Ordinal)
+				&& !normalizedPath.Equals(rootFolder, StringComparison.Ordinal))
+			{
+				normalizedPath = $"{rootFolder.TrimEnd('/')}/{normalizedPath.TrimStart('/')}";
+			}
 		}
 
-		return path;
+		return normalizedPath.TrimStart('/');
+	}
+
+	private static string NormalizeArchivePath(string value)
+	{
+		var normalized = WebUtility.UrlDecode(value).Replace('\\', '/').Trim();
+		if (string.IsNullOrEmpty(normalized))
+		{
+			return string.Empty;
+		}
+
+		var segments = new List<string>();
+		foreach (var segment in normalized.Split('/', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries))
+		{
+			switch (segment)
+			{
+				case ".":
+					continue;
+				case "..":
+				{
+					if (segments.Count > 0)
+					{
+						segments.RemoveAt(segments.Count - 1);
+					}
+					continue;
+				}
+				default:
+					segments.Add(segment);
+					break;
+			}
+		}
+
+		return string.Join("/", segments);
 	}
 
 	/// <summary>
@@ -157,12 +203,17 @@ public partial class EpubReader : IEbookReader
 	/// <returns>Image as bytes</returns>
 	private async Task<byte[]?> LoadCoverImageAsBytesAsync()
 	{
-		var cover = 
-			_package?.Manifest.Items.FirstOrDefault(item => item.Id == _package?.Metadata.Meta.FirstOrDefault(x => x.Name == "cover")?.Content) 
-			?? _package?.Manifest.Items.FirstOrDefault(x => x.Properties == "cover-image");
+		var coverMeta = _package?.Metadata.Meta.FirstOrDefault(x =>
+			string.Equals(x.Name, "cover", StringComparison.OrdinalIgnoreCase)
+			|| string.Equals(x.Property, "cover", StringComparison.OrdinalIgnoreCase));
+		var coverId = coverMeta?.Content;
 
-		return cover is null 
-			? null 
+		var cover = _package?.Manifest.Items.FirstOrDefault(item => item.Id == coverId)
+			?? _package?.Manifest.Items.FirstOrDefault(item => HasProperty(item, "cover-image"))
+			?? _package?.Manifest.Items.FirstOrDefault(item => string.Equals(item.Id, "cover", StringComparison.OrdinalIgnoreCase));
+
+		return cover is null
+			? null
 			: await LoadImageAsBytes(cover.Href);
 	}
 
@@ -179,18 +230,31 @@ public partial class EpubReader : IEbookReader
 		}
 
 		var absolutePath = GetAbsolutePath(path)!;
-
 		if (_images.TryGetValue(absolutePath, out var cachedImage))
 		{
 			return cachedImage;
 		}
 
+		var loader = _imageLoaders.GetOrAdd(
+			absolutePath,
+			static (path, reader) => new Lazy<Task<byte[]>>(() => reader.LoadBinaryResourceAsync(path), LazyThreadSafetyMode.ExecutionAndPublication),
+			this);
+		var bytes = await loader.Value;
+		_images[absolutePath] = bytes;
+		return bytes;
+	}
+
+	private async Task<byte[]> LoadBinaryResourceAsync(string absolutePath)
+	{
 		var memory = new MemoryStream();
-		await _zipLock.WaitAsync();
+		await _zipLock!.WaitAsync();
 		try
 		{
-			var entry = _zipArchive!.GetEntry(absolutePath);
-			if (entry == null) return [];
+			var entry = GetArchiveEntry(absolutePath);
+			if (entry is null)
+			{
+				return [];
+			}
 
 			await using var stream = await entry.OpenAsync();
 			await stream.CopyToAsync(memory);
@@ -200,9 +264,15 @@ public partial class EpubReader : IEbookReader
 			_zipLock.Release();
 		}
 
-		var bytes = memory.ToArray();
-		_images[absolutePath] = bytes;
-		return bytes;
+		return memory.ToArray();
+	}
+
+	private ZipArchiveEntry? GetArchiveEntry(string absolutePath)
+	{
+		return _archiveEntries.GetOrAdd(
+			absolutePath,
+			static (path, reader) => reader._zipArchive!.GetEntry(path),
+			this);
 	}
 
 	/// <summary>
@@ -229,11 +299,12 @@ public partial class EpubReader : IEbookReader
 			};
 		}
 
-		if (_package.Manifest.Items.Any(i => i.Properties == "nav"))
+		var navItem = _package.Manifest.Items.FirstOrDefault(i => HasProperty(i, "nav"));
+		if (navItem is not null)
 		{
 			// V3 NAV TOC
-			var nav = await LoadNavAsync(_package.Manifest.Items.First(i => i.Properties == "nav").Href);
-			tableOfContents = MapNavToTableOfContents(nav.ChapterList.First().Chapter);
+			var nav = await LoadNavAsync(navItem.Href);
+			tableOfContents = MapNavToTableOfContents(nav.ChapterList.SelectMany(x => x.Chapter));
 		}
 		else if (_package!.Spine.Toc != null)
 		{
@@ -262,9 +333,19 @@ public partial class EpubReader : IEbookReader
 		content.TableOfContents = tableOfContents;
 		
 		content.Chapters = await MapSpineToChapters(tocContainsId: id => content.GetChapterFromTableOfContents(id) is not null);
+		ClearTransientCaches();
 
 		return content;
 
+	}
+
+	private void ClearTransientCaches()
+	{
+		_contentCache.Clear();
+		_images.Clear();
+		_archiveEntries.Clear();
+		_contentLoaders.Clear();
+		_imageLoaders.Clear();
 	}
 
 	private async Task<IReadOnlyList<Stylesheet>> LoadStylesheets(IEnumerable<Item> cssFiles)
@@ -282,7 +363,7 @@ public partial class EpubReader : IEbookReader
 			{
 				css = css.Replace(fontFace.Value, null);
 			}
-			var processedCss = await HtmlManager.ApplyCssProcessing(css);
+			var processedCss = HtmlManager.ApplyCssProcessing(css);
 			return new Stylesheet { Identifier= item.Href, Content = processedCss};
 		});
 		return await Task.WhenAll(cssTasks);
@@ -318,36 +399,78 @@ public partial class EpubReader : IEbookReader
 			entries.Add(chapter);
 		}
 		return entries;
-	}			
+	}
 
 	/// <summary>
 	/// Maps the V3 NAV TOC to an EpubChapter list recursively
 	/// </summary>
 	/// <param name="navItems">List of Nav li items</param>
 	/// <returns>List of TocEntry</returns>
-	private List<TocEntry> MapNavToTableOfContents(List<NavLi> navItems)
+	private List<TocEntry> MapNavToTableOfContents(IEnumerable<NavLi> navItems)
 	{
 		var entries = new List<TocEntry>();
 		foreach (var navItem in navItems)
 		{
-			if (_coverPath is not null && _coverPath.EndsWith(CleanPath(navItem.Link.Href) ?? " "))
+			var href = navItem.Link?.Href;
+			if (_coverPath is not null && !string.IsNullOrWhiteSpace(href) && _coverPath.EndsWith(CleanPath(href) ?? " "))
 			{
 				continue;
 			}
-			
+
 			var chapter = new TocEntry
 			{
-				Title = navItem.Link.Text,
-				Id = _package!.Manifest.Items.FirstOrDefault(x => x.Href.EndsWith(CleanPath(navItem.Link.Href) ?? " "))?.Id
+				Title = GetNavItemTitle(navItem),
+				Id = GetManifestItemId(href)
 			};
-			
-			if(navItem.ChapterList.Count > 0)
+
+			if (navItem.ChapterList.Count > 0)
 			{
-				chapter.Entries = MapNavToTableOfContents(navItem.ChapterList.First().Chapter);
+				chapter.Entries = MapNavToTableOfContents(navItem.ChapterList.SelectMany(x => x.Chapter));
 			}
+
+			if (navItem.Link is null && chapter.Entries.Count == 0 && string.IsNullOrWhiteSpace(chapter.Title))
+			{
+				continue;
+			}
+
 			entries.Add(chapter);
 		}
 		return entries;
+	}
+
+	private static string? GetNavItemTitle(NavLi navItem)
+	{
+		var title = navItem.Link?.Text ?? navItem.Label?.Text;
+		return string.IsNullOrWhiteSpace(title) ? title : title.Trim();
+	}
+
+	private string? GetManifestItemId(string? href)
+	{
+		if (string.IsNullOrWhiteSpace(href))
+		{
+			return null;
+		}
+
+		var target = NormalizeArchivePath(CleanPath(href) ?? string.Empty);
+		if (string.IsNullOrEmpty(target))
+		{
+			return null;
+		}
+
+		return _package?.Manifest.Items.FirstOrDefault(x =>
+			string.Equals(NormalizeArchivePath(CleanPath(x.Href) ?? string.Empty), target, StringComparison.OrdinalIgnoreCase))?.Id;
+	}
+
+	private static bool HasProperty(Item item, string propertyName)
+	{
+		if (string.IsNullOrWhiteSpace(item.Properties))
+		{
+			return false;
+		}
+
+		return item.Properties
+			.Split(' ', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
+			.Contains(propertyName, StringComparer.OrdinalIgnoreCase);
 	}
 
 	/// <summary>
@@ -356,68 +479,48 @@ public partial class EpubReader : IEbookReader
 	/// <returns></returns>
 	private async Task<List<Chapter>> MapSpineToChapters(Func<string, bool> tocContainsId)
 	{
-		var items = await Task.WhenAll(_package!.Spine.ItemRefs.Select(async itemRef =>
+		if (_package is null)
 		{
-			var item = _package!.Manifest.Items.First(x => x.Id == itemRef.IdRef);
-			var content = await LoadFileContentAsync(item.Href);
-			
-			return (item.Id, content);
-		}));
-		
-		var chapters = new List<Chapter>();
-		var lastChapterId = string.Empty;
-		
-		foreach (var item in items)
+			return [];
+		}
+
+		var manifestItems = _package.Manifest.Items.ToDictionary(static x => x.Id, static x => x, StringComparer.Ordinal);
+		var chapters = new List<Chapter>(_package.Spine.ItemRefs.Count);
+		var currentChapterId = string.Empty;
+
+		foreach (var itemRef in _package.Spine.ItemRefs)
 		{
-			var document = new HtmlDocument();
-			document.LoadHtml(item.content);
-			var stylesheets = GetStylesheetsFromHtml(document);
-			var bodyNode = document.QuerySelector("body");
-			var chapterContent = bodyNode is not null ? bodyNode.InnerHtml : item.content;
+			if (!manifestItems.TryGetValue(itemRef.IdRef, out var item))
+			{
+				continue;
+			}
 
 			if (tocContainsId(item.Id))
 			{
-				lastChapterId = item.Id;
-				chapters.Add(new Chapter
-				{
-					Identifier = item.Id,
-					Content = chapterContent,
-					Title = GetTitleFromHtml(document),
-					Weight = GetWordCount(chapterContent),
-					Stylesheets = stylesheets,
-					ParagraphClassName = GetParagraphClass(chapterContent)
-				});
+				currentChapterId = item.Id;
 			}
-			else
+
+			var content = await LoadFileContentAsync(item.Href);
+			var document = new HtmlDocument();
+			document.LoadHtml(content);
+			var stylesheets = GetStylesheetsFromHtml(document);
+			var bodyNode = document.DocumentNode.SelectSingleNode("//body") ?? document.DocumentNode;
+			var chapterContent = bodyNode.InnerHtml;
+			var processedContent = await HtmlManager.ApplyHtmlProcessingAsync(chapterContent, LoadImageAsBytes, _cacheFolderName);
+			var paragraphClass = processedContent.Length == 0 ? null : GetParagraphClass(processedContent);
+
+			chapters.Add(new Chapter
 			{
-				var lastChapter = chapters.FirstOrDefault(c => c.Identifier == lastChapterId);
-				if (lastChapter is null) continue;
-				lastChapter.Content += chapterContent;
-				lastChapter.Weight = GetWordCount(lastChapter.Content);
-				lastChapter.ParagraphClassName = GetParagraphClass(chapterContent);
-				foreach (var stylesheet in stylesheets.Where(stylesheet => !lastChapter.Stylesheets.Contains(stylesheet)))
-				{
-					lastChapter.Stylesheets.Add(stylesheet);
-				}
-			}
-			
+				Identifier = currentChapterId,
+				Content = processedContent,
+				Title = GetTitleFromHtml(document),
+				Stylesheets = stylesheets,
+				IsContentProcessed = true,
+				ParagraphClassName = paragraphClass
+			});
 		}
 
 		return chapters;
-	}
-
-	/// <summary>
-	/// Counts the words in a string, removing HTML tags first for accuracy
-	/// </summary>
-	/// <param name="content">Html</param>
-	/// <returns>Word count</returns>
-	private int GetWordCount(string content)
-	{
-		// Remove HTML tags
-		var textOnly = HtmlRegex().Replace(content, string.Empty);
-
-		// Count remaining words
-		return textOnly.Split(_separator, StringSplitOptions.RemoveEmptyEntries).Length;
 	}
 		
 	/// <summary>
@@ -484,105 +587,7 @@ public partial class EpubReader : IEbookReader
 	/// <returns>Cleaned path</returns>
 	private string? CleanPath(string? path) => path != null && path.Contains('#') ? path[..path.IndexOf('#')] : path;
 	
-	/// <summary>
-	/// Does some processing to the html such as removing external css references, replacing css properties and converting images to base64
-	/// </summary>
-	/// <param name="content">The original html</param>
-	/// <returns>Processed html</returns>
-	public async Task<string> ApplyHtmlProcessingAsync(string content)
-	{
-		var doc = new HtmlDocument();
-		doc.LoadHtml(content);
-		
-		var linkNodes = doc.QuerySelectorAll("link[rel='stylesheet']");
-		if (linkNodes != null)
-		{
-			foreach (var linkNode in linkNodes)
-			{
-				linkNode.Remove();
-			}
-		}
-		
-		
-		var divWithImageNodes = doc.QuerySelectorAll("div > img:first-child:last-child");
-		if (divWithImageNodes != null)
-		{
-			foreach (var divNode in divWithImageNodes)
-			{
-				divNode.ParentNode?.SetAttributeValue("style", "margin: 0 auto;text-align:center;");
-			}
-		}
-		
-		var spans = doc.QuerySelectorAll("p span:first-child");
-		foreach (var span in spans)
-		{
-			if(span is not { InnerText.Length: 1 }) continue;
-			var letter = span.InnerText;
-			var elementsToRemove = new List<HtmlNode> { span };
-
-			var parent = span.ParentNode;
-			while (parent?.Name != "p")
-			{
-				if(parent is null) break;
-				elementsToRemove.Add(parent);
-				parent = parent.ParentNode;
-			}
-			parent!.SetAttributeValue("class", (parent.Attributes["class"]?.Value ?? "") + " drop-cap");
-			
-			foreach (var node in elementsToRemove)
-			{
-				node.Remove();
-			}
-			parent.InnerHtml = letter + parent.InnerHtml;
-			break;
-		}
-		
-		var imageNodes = doc.QuerySelectorAll("img, image");
-		if (imageNodes != null)
-		{
-			foreach (var imageNode in imageNodes)
-			{
-				var attributeName = imageNode.Name == "img" ? "src" : "href";
-
-				var src = imageNode.Attributes.FirstOrDefault(a => a.Name == attributeName || a.Name.EndsWith(attributeName))?.Value;
-				if (string.IsNullOrEmpty(src)) continue;
-				var imageBytes = await LoadImageAsBytes(src);
-
-				// Remove caching for now
-				//if (!string.IsNullOrWhiteSpace(Globals.CachePath))
-				//{
-				//	try
-				//	{
-				//		var hash = Convert.ToHexStringLower(SHA256.HashData(imageBytes));
-				//		var imagePath = Path.Combine(Globals.CachePath, _cacheFolderName, hash + Path.GetExtension(src));
-				//		if (!File.Exists(imagePath))
-				//		{
-				//			Directory.CreateDirectory(Path.Combine(Globals.CachePath, _cacheFolderName));
-				//			await File.WriteAllBytesAsync(imagePath, imageBytes);
-				//		}
-				//		imageNode.SetAttributeValue(attributeName, "/cache/" + _cacheFolderName + "/" + hash + Path.GetExtension(src));
-				//	}
-				//	catch
-				//	{
-				//		imageNode.SetAttributeValue(attributeName, $"data:image/png;base64,{Convert.ToBase64String(imageBytes)}");
-				//	}
-					
-				//}
-				//else
-				//{
-				//	imageNode.SetAttributeValue(attributeName, $"data:image/png;base64,{Convert.ToBase64String(imageBytes)}");
-				//}
-
-				imageNode.SetAttributeValue(attributeName, $"data:image/png;base64,{Convert.ToBase64String(imageBytes)}");
-				imageNode.SetAttributeValue("class", (imageNode.Attributes["class"]?.Value ?? "") + " zoomable");
-			}
-		}
-
-		var processedHtml = await HtmlManager.ApplyCssProcessing(doc.DocumentNode.OuterHtml);
-		return processedHtml;
-
-	}
-
+	
 	/// <summary>
 	/// Loads the content of a file inside the epub
 	/// </summary>
@@ -597,17 +602,27 @@ public partial class EpubReader : IEbookReader
 		}
 
 		var absolutePath = GetAbsolutePath(path)!;
-
 		if (_contentCache.TryGetValue(absolutePath, out var cachedContent))
 		{
 			return cachedContent;
 		}
 
+		var loader = _contentLoaders.GetOrAdd(
+			absolutePath,
+			static (path, reader) => new Lazy<Task<string>>(() => reader.LoadTextResourceAsync(path), LazyThreadSafetyMode.ExecutionAndPublication),
+			this);
+		var content = await loader.Value;
+		_contentCache[absolutePath] = content;
+		return content;
+	}
+
+	private async Task<string> LoadTextResourceAsync(string absolutePath)
+	{
 		var memory = new MemoryStream();
-		await _zipLock.WaitAsync();
+		await _zipLock!.WaitAsync();
 		try
 		{
-			var entry = _zipArchive!.GetEntry(absolutePath) ?? throw new Exception($"Could not load file: {path}");
+			var entry = GetArchiveEntry(absolutePath) ?? throw new Exception($"Could not load file: {absolutePath}");
 			await using var stream = await entry.OpenAsync();
 			await stream.CopyToAsync(memory);
 		}
@@ -617,10 +632,8 @@ public partial class EpubReader : IEbookReader
 		}
 
 		memory.Position = 0;
-		using var reader = new StreamReader(memory);
-		var content = await reader.ReadToEndAsync();
-		_contentCache[absolutePath] = content;
-		return content;
+		using var reader = new StreamReader(memory, Encoding.UTF8, true);
+		return await reader.ReadToEndAsync();
 	}
 	
 	/// <summary>
@@ -632,7 +645,8 @@ public partial class EpubReader : IEbookReader
 	{
 		var content = await LoadFileContentAsync(path);
 		var doc = XDocument.Parse(content);
-		var navElement = doc.Descendants().First(x => x.Name.LocalName == "body").Descendants().First(x => x.Name.LocalName == "nav");
+		var navElement = doc.Descendants().FirstOrDefault(x => x.Name.LocalName == "nav")
+			?? throw new Exception($"Could not find navigation content in epub file: {path}");
 		var serializer = Serializers.GetOrAdd(typeof(Nav), t => new XmlSerializer(t));
 		using var reader = navElement.CreateReader();
 		return (Nav)serializer.Deserialize(reader)!;
@@ -642,8 +656,6 @@ public partial class EpubReader : IEbookReader
 	private static partial Regex CssImportRegex();
 	[GeneratedRegex(@"@font-face\s*{[^}]+}")]
 	private static partial Regex FontFaceRegex();
-	[GeneratedRegex("<.*?>")]
-	private static partial Regex HtmlRegex();
 	[GeneratedRegex(@"class\s*=\s*[""']([^""']+)[""']", RegexOptions.IgnoreCase, "es-ES")]
 	private static partial Regex CssClassRegex();
 	[GeneratedRegex("&#([0-9]+);")]
@@ -655,8 +667,7 @@ public partial class EpubReader : IEbookReader
 	    _rootFolder = null;
 	    _package = null;
 	    _coverPath = null;
-	    _contentCache.Clear();
-	    _images.Clear();
+	    ClearTransientCaches();
 	    _zipArchive?.Dispose();
 	    _zipLock?.Dispose();
 	    GC.SuppressFinalize(this);
