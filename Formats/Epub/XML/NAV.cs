@@ -20,15 +20,28 @@ public class NavOl
 public class NavLi
 {
     [XmlElement("a")]
-    public NavA Link { get; set; } = null!;
+    public NavA? Link { get; set; }
+
+    [XmlElement("span")]
+    public NavSpan? Label { get; set; }
+
     [XmlElement("ol")]
     public List<NavOl> ChapterList { get; set; } = [];
+}
+
+public class NavSpan
+{
+    [XmlText]
+    public string Text { get; set; } = string.Empty;
 }
 
 public class NavA
 {
     [XmlAttribute("href")]
-    public string Href { get; set; } = null!;
+    public string Href { get; set; } = string.Empty;
+
+    [XmlAttribute("title")]
+    public string? Title { get; set; }
     
     [XmlText]
     public string SimpleText { get; set; } = string.Empty;
@@ -41,8 +54,9 @@ public class NavA
     {
         get
         {
-            if(!string.IsNullOrEmpty(SimpleText)) return SimpleText;
-            return Child is null ? string.Empty : GetTextFromLink(Child);
+            if (!string.IsNullOrWhiteSpace(SimpleText)) return SimpleText.Trim();
+            if (!string.IsNullOrWhiteSpace(Title)) return Title.Trim();
+            return Child is null ? string.Empty : GetTextFromLink(Child).Trim();
         }
     }
     
