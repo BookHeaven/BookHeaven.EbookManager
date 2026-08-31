@@ -6,5 +6,4 @@ public interface IEbookReader : IDisposable
 {
     Task<Ebook> ReadMetadataAsync(string path);
     Task<Ebook> ReadAllAsync(string path);
-    Task<string> ApplyHtmlProcessingAsync(string content);
 }
