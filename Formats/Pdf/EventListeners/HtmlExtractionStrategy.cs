@@ -58,7 +58,7 @@ internal class HtmlExtractionStrategy(PdfDocumentContext context, Rectangle page
                 var imgBytes = image.GetImageBytes(true);
                 string? filename = null;
 
-                if (!string.IsNullOrWhiteSpace(EbookManagerGlobals.CachePath))
+                if (!string.IsNullOrWhiteSpace(EbookManagerGlobals.CachePath) && !string.IsNullOrWhiteSpace(context.CachePath))
                 {
                     var hash = Convert.ToHexStringLower(SHA256.HashData(imgBytes));
                     filename = Path.Combine(context.CachePath, $"{hash}.png");
