@@ -11,5 +11,5 @@ internal class PdfImage : PdfBaseElement
     
     public PdfImage() => Type = ElementType.Image;
     
-    public string HtmlSource => Data is not null ? $"data:{MimeType};base64,{Convert.ToBase64String(Data)}" : Src?.Replace(EbookManagerGlobals.CachePath, "/cache") ?? string.Empty;
+    public string HtmlSource => Data is not null ? $"data:{MimeType};base64,{Convert.ToBase64String(Data)}" : BookHeavenScheme.BuildUrl(Src!.Replace(EbookManagerGlobals.CachePath, "/cache")) ?? string.Empty;
 }
