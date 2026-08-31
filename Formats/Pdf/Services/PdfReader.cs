@@ -78,11 +78,6 @@ public class PdfReader : IEbookReader
 
         return ebook;
     }
-
-    public Task<string> ApplyHtmlProcessingAsync(string content)
-    {
-        throw new NotSupportedException("PDF format does not support HTML processing.");
-    }
     
     private static async Task<List<TocEntry>> MapOutlinesToTableOfContents(PdfDocument pdfDocument, PdfNameTree tree, IList<PdfOutline> outlines)
     {
