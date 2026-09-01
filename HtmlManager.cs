@@ -103,12 +103,12 @@ internal static partial class HtmlManager
         });
     }
     
-    public static async Task<string> ApplyHtmlProcessingAsync(string content, Func<string, Task<byte[]>> loadImageAsBytes, string? cacheFolder = null)
+    public static async Task<string> ApplyHtmlProcessingAsync(HtmlNode content, Func<string, Task<byte[]>> loadImageAsBytes, string? cacheFolder = null)
 	{
-		var doc = new HtmlDocument();
-		doc.LoadHtml(content);
+		if(string.IsNullOrEmpty(content.InnerHtml))
+			return string.Empty;
 		
-		var linkNodes = doc.QuerySelectorAll("link[rel='stylesheet']");
+		var linkNodes = content.QuerySelectorAll("link[rel='stylesheet']");
 		if (linkNodes != null)
 		{
 			foreach (var linkNode in linkNodes)
@@ -118,7 +118,7 @@ internal static partial class HtmlManager
 		}
 		
 		
-		var divWithImageNodes = doc.QuerySelectorAll("div > img:first-child:last-child");
+		var divWithImageNodes = content.QuerySelectorAll("div > img:first-child:last-child");
 		if (divWithImageNodes != null)
 		{
 			foreach (var divNode in divWithImageNodes)
@@ -127,7 +127,7 @@ internal static partial class HtmlManager
 			}
 		}
 		
-		var spans = doc.QuerySelectorAll("p span:first-child");
+		var spans = content.QuerySelectorAll("p span:first-child");
 		foreach (var span in spans)
 		{
 			if(span is not { InnerText.Length: 1 }) continue;
@@ -151,7 +151,7 @@ internal static partial class HtmlManager
 			break;
 		}
 		
-		var imageNodes = doc.QuerySelectorAll("img, image");
+		var imageNodes = content.QuerySelectorAll("img, image");
 		if (imageNodes != null)
 		{
 			foreach (var imageNode in imageNodes)
@@ -160,29 +160,22 @@ internal static partial class HtmlManager
 
 				var src = imageNode.Attributes.FirstOrDefault(a => a.Name == attributeName || a.Name.EndsWith(attributeName))?.Value;
 				if (string.IsNullOrEmpty(src)) continue;
-				var imageBytes = await loadImageAsBytes(src);
+				var fileName = Path.GetFileName(src);
 				
 				if (!string.IsNullOrWhiteSpace(EbookManagerGlobals.CachePath) && !string.IsNullOrWhiteSpace(cacheFolder))
 				{
-					try
+					var imagePath = Path.Combine(EbookManagerGlobals.CachePath, cacheFolder, fileName);
+					if (!File.Exists(imagePath))
 					{
-						var hash = Convert.ToHexStringLower(SHA256.HashData(imageBytes));
-						var imagePath = Path.Combine(EbookManagerGlobals.CachePath, cacheFolder ?? "", hash + Path.GetExtension(src));
-						if (!File.Exists(imagePath))
-						{
-							Directory.CreateDirectory(Path.Combine(EbookManagerGlobals.CachePath, cacheFolder ?? ""));
-							await File.WriteAllBytesAsync(imagePath, imageBytes);
-						}
-						imageNode.SetAttributeValue(attributeName, BookHeavenScheme.BuildUrl("/cache/" + cacheFolder + "/" + hash + Path.GetExtension(src)));
+						var imageBytes = await loadImageAsBytes(src);
+						Directory.CreateDirectory(Path.Combine(EbookManagerGlobals.CachePath, cacheFolder));
+						await File.WriteAllBytesAsync(imagePath, imageBytes);
 					}
-					catch
-					{
-						imageNode.SetAttributeValue(attributeName, $"data:image/png;base64,{Convert.ToBase64String(imageBytes)}");
-					}
-					
+					imageNode.SetAttributeValue(attributeName, BookHeavenScheme.BuildUrl("/cache/" + cacheFolder + "/" + fileName));
 				}
 				else
 				{
+					var imageBytes = await loadImageAsBytes(src);
 					imageNode.SetAttributeValue(attributeName, $"data:image/png;base64,{Convert.ToBase64String(imageBytes)}");
 				}
 
@@ -191,7 +184,7 @@ internal static partial class HtmlManager
 			}
 		}
 
-		var processedHtml = ApplyCssProcessing(doc.DocumentNode.OuterHtml);
+		var processedHtml = ApplyCssProcessing(content.OuterHtml);
 		return processedHtml;
 	}
     
