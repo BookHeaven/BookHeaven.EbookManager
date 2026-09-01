@@ -514,7 +514,6 @@ public partial class EpubReader : IEbookReader
 				Content = processedContent,
 				Title = GetTitleFromHtml(document),
 				Stylesheets = stylesheets,
-				IsContentProcessed = true,
 				ParagraphClassName = paragraphClass
 			});
 		}

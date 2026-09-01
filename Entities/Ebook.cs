@@ -77,7 +77,6 @@ public class Chapter
     public string Content { get; set; } = string.Empty;
     public List<string> Stylesheets { get; set; } = [];
     public string? ParagraphClassName { get; set; }
-    public bool IsContentProcessed { get; set; } = false;
 }
 
 public class Stylesheet
