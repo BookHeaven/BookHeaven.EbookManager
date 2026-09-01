@@ -115,7 +115,6 @@ public class PdfReader : IEbookReader
             var coverChapter = new Chapter
             {
                 Identifier = "1",
-                Weight = 1,
                 IsContentProcessed = true,
                 Content = await context.ConvertToHtml(1, 1)
             };
@@ -133,7 +132,6 @@ public class PdfReader : IEbookReader
                     Identifier = flattenedToc[i].Id!,
                     Title = flattenedToc[i].Title,
                     IsContentProcessed = true,
-                    Weight = weight,
                     Content = await context.ConvertToHtml(startPage, endPage - 1)
                 };
 
@@ -147,8 +145,7 @@ public class PdfReader : IEbookReader
             {
                 Identifier = "1",
                 IsContentProcessed = true,
-                Content = await context.ConvertToHtml(1, context.Document.GetNumberOfPages()),
-                Weight = context.Document.GetNumberOfPages() - 1
+                Content = await context.ConvertToHtml(1, context.Document.GetNumberOfPages())
             };
             chapters.Add(chapter);
         }
