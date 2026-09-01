@@ -487,7 +487,7 @@ public partial class EpubReader : IEbookReader
 		var manifestItems = _package.Manifest.Items.ToDictionary(static x => x.Id, static x => x, StringComparer.Ordinal);
 		var chapters = new List<Chapter>(_package.Spine.ItemRefs.Count);
 		var currentChapterId = string.Empty;
-
+		
 		foreach (var itemRef in _package.Spine.ItemRefs)
 		{
 			if (!manifestItems.TryGetValue(itemRef.IdRef, out var item))
@@ -505,8 +505,7 @@ public partial class EpubReader : IEbookReader
 			document.LoadHtml(content);
 			var stylesheets = GetStylesheetsFromHtml(document);
 			var bodyNode = document.DocumentNode.SelectSingleNode("//body") ?? document.DocumentNode;
-			var chapterContent = bodyNode.InnerHtml;
-			var processedContent = await HtmlManager.ApplyHtmlProcessingAsync(chapterContent, LoadImageAsBytes, _cacheFolderName);
+			var processedContent = await HtmlManager.ApplyHtmlProcessingAsync(bodyNode, LoadImageAsBytes, _cacheFolderName);
 			var paragraphClass = processedContent.Length == 0 ? null : GetParagraphClass(processedContent);
 
 			chapters.Add(new Chapter
