@@ -75,6 +75,20 @@ internal class HtmlExtractionStrategy(PdfDocumentContext context, Rectangle page
                         filename = null;
                     }
                 }
+
+                string source;
+                if(string.IsNullOrEmpty(filename))
+                {
+                    source = $"data:image/png;base64,{Convert.ToBase64String(imgBytes)}";
+                }
+                else
+                {
+                    source = filename.Replace(EbookManagerGlobals.CachePath, "/cache");
+                    if (EbookManagerGlobals.UseCustomScheme)
+                    {
+                        source = BookHeavenScheme.BuildUrl(source);
+                    }
+                }
                 
                 
                 _elements.Add(new PdfImage
@@ -83,8 +97,7 @@ internal class HtmlExtractionStrategy(PdfDocumentContext context, Rectangle page
                     X = x,
                     Height = height,
                     Width = width,
-                    Data = string.IsNullOrWhiteSpace(filename) ? imgBytes : null,
-                    Src = filename,
+                    Src = source,
                 });
                 break;
         }
@@ -116,7 +129,7 @@ internal class HtmlExtractionStrategy(PdfDocumentContext context, Rectangle page
                     break;
                 case PdfImage imageElement:
                 {
-                    sb.AppendLine($"<img class='zoomable' width='{imageElement.Width}' height='{imageElement.Height}' src='{imageElement.HtmlSource}' style='max-width:100%;display:block;margin-inline:auto;' />");
+                    sb.AppendLine($"<img class='zoomable' width='{imageElement.Width}' height='{imageElement.Height}' src='{imageElement.Src}' style='max-width:100%;display:block;margin-inline:auto;' />");
                     break;
                 }
             }
