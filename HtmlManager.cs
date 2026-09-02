@@ -103,7 +103,7 @@ internal static partial class HtmlManager
         });
     }
     
-    public static async Task<string> ApplyHtmlProcessingAsync(HtmlNode content, Func<string, Task<byte[]>> loadImageAsBytes, string? cacheFolder = null)
+    public static async Task<string> ApplyHtmlProcessingAsync(HtmlNode content, Func<string, string, Task> extractEntryToFolderAsync, string? cacheFolder = null)
 	{
 		if(string.IsNullOrEmpty(content.InnerHtml))
 			return string.Empty;
@@ -167,17 +167,15 @@ internal static partial class HtmlManager
 					var imagePath = Path.Combine(EbookManagerGlobals.CachePath, cacheFolder, fileName);
 					if (!File.Exists(imagePath))
 					{
-						var imageBytes = await loadImageAsBytes(src);
-						Directory.CreateDirectory(Path.Combine(EbookManagerGlobals.CachePath, cacheFolder));
-						await File.WriteAllBytesAsync(imagePath, imageBytes);
+						await extractEntryToFolderAsync(src, imagePath);
 					}
 					imageNode.SetAttributeValue(attributeName, BookHeavenScheme.BuildUrl("/cache/" + cacheFolder + "/" + fileName));
 				}
-				else
+				/*else
 				{
 					var imageBytes = await loadImageAsBytes(src);
 					imageNode.SetAttributeValue(attributeName, $"data:image/png;base64,{Convert.ToBase64String(imageBytes)}");
-				}
+				}*/
 
 				// imageNode.SetAttributeValue(attributeName, $"data:image/png;base64,{Convert.ToBase64String(imageBytes)}");
 				imageNode.SetAttributeValue("class", (imageNode.Attributes["class"]?.Value ?? "") + " zoomable");
