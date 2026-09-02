@@ -364,7 +364,7 @@ public partial class EpubReader : IEbookReader
 				css = css.Replace(fontFace.Value, null);
 			}
 			var processedCss = HtmlManager.ApplyCssProcessing(css);
-			return new Stylesheet { Identifier= item.Href, Content = processedCss};
+			return new Stylesheet { Identifier = Path.GetFileNameWithoutExtension(item.Href), Content = processedCss  };
 		});
 		return await Task.WhenAll(cssTasks);
 	}
@@ -472,6 +472,35 @@ public partial class EpubReader : IEbookReader
 			.Split(' ', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
 			.Contains(propertyName, StringComparer.OrdinalIgnoreCase);
 	}
+	
+	private async Task ExtractEntryToFolderAsync(string path, string destinationPath)
+	{
+		var absolutePath = GetAbsolutePath(path);
+		if (absolutePath is null)
+		{
+			throw new Exception($"Invalid path: {path}");
+		}
+
+		await _zipLock!.WaitAsync();
+		try
+		{
+			var entry = GetArchiveEntry(absolutePath);
+			if (entry is null)
+			{
+				throw new Exception($"File not found inside epub: {absolutePath}");
+			}
+			Directory.CreateDirectory(Path.GetDirectoryName(destinationPath)!);
+			await entry.ExtractToFileAsync(destinationPath, overwrite: true);
+		}
+		catch (Exception e)
+		{
+			throw new Exception($"Error extracting entry: {absolutePath} to {destinationPath}", e);
+		}
+		finally
+		{
+			_zipLock.Release();
+		}
+	}
 
 	/// <summary>
 	/// Maps the spine to a list of SpineItem
@@ -505,7 +534,7 @@ public partial class EpubReader : IEbookReader
 			document.LoadHtml(content);
 			var stylesheets = GetStylesheetsFromHtml(document);
 			var bodyNode = document.DocumentNode.SelectSingleNode("//body") ?? document.DocumentNode;
-			var processedContent = await HtmlManager.ApplyHtmlProcessingAsync(bodyNode, LoadImageAsBytes, _cacheFolderName);
+			var processedContent = await HtmlManager.ApplyHtmlProcessingAsync(bodyNode, ExtractEntryToFolderAsync, _cacheFolderName);
 			var paragraphClass = processedContent.Length == 0 ? null : GetParagraphClass(processedContent);
 
 			chapters.Add(new Chapter
@@ -549,7 +578,7 @@ public partial class EpubReader : IEbookReader
 	private static List<string> GetStylesheetsFromHtml(HtmlDocument document)
 	{
 		var linkNodes = document.QuerySelectorAll("link[href]");
-		return linkNodes is null ? [] : linkNodes.Select(link => link.GetAttributeValue("href", "")).ToList();
+		return linkNodes is null ? [] : linkNodes.Select(link => Path.GetFileNameWithoutExtension(link.GetAttributeValue("href", ""))).ToList();
 	}
 
 	/// <summary>
