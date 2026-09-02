@@ -103,7 +103,7 @@ internal static partial class HtmlManager
         });
     }
     
-    public static async Task<string> ApplyHtmlProcessingAsync(HtmlNode content, Func<string, string, Task> extractEntryToFolderAsync, string? cacheFolder = null)
+    public static async Task<string> ApplyHtmlProcessingAsync(HtmlNode content, Func<string, string, Task> extractEntryToFolderAsync, string cacheFolder)
 	{
 		if(string.IsNullOrEmpty(content.InnerHtml))
 			return string.Empty;
@@ -162,22 +162,18 @@ internal static partial class HtmlManager
 				if (string.IsNullOrEmpty(src)) continue;
 				var fileName = Path.GetFileName(src);
 				
-				if (!string.IsNullOrWhiteSpace(EbookManagerGlobals.CachePath) && !string.IsNullOrWhiteSpace(cacheFolder))
+				var imagePath = Path.Combine(EbookManagerGlobals.CachePath, cacheFolder, fileName);
+				if (!File.Exists(imagePath))
 				{
-					var imagePath = Path.Combine(EbookManagerGlobals.CachePath, cacheFolder, fileName);
-					if (!File.Exists(imagePath))
-					{
-						await extractEntryToFolderAsync(src, imagePath);
-					}
-					imageNode.SetAttributeValue(attributeName, BookHeavenScheme.BuildUrl("/cache/" + cacheFolder + "/" + fileName));
+					await extractEntryToFolderAsync(src, imagePath);
 				}
-				/*else
-				{
-					var imageBytes = await loadImageAsBytes(src);
-					imageNode.SetAttributeValue(attributeName, $"data:image/png;base64,{Convert.ToBase64String(imageBytes)}");
-				}*/
 
-				// imageNode.SetAttributeValue(attributeName, $"data:image/png;base64,{Convert.ToBase64String(imageBytes)}");
+				var finalUrl = "/cache/" + cacheFolder + "/" + fileName;
+				if (EbookManagerGlobals.UseCustomScheme)
+				{
+					finalUrl = BookHeavenScheme.BuildUrl(finalUrl);
+				}
+				imageNode.SetAttributeValue(attributeName, finalUrl);
 				imageNode.SetAttributeValue("class", (imageNode.Attributes["class"]?.Value ?? "") + " zoomable");
 			}
 		}
