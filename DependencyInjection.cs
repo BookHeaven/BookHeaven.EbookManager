@@ -20,11 +20,7 @@ public static class DependencyInjection
             var options = new EbookManagerOptions();
             ebookManagerOptions?.Invoke(options);
 
-            if (!string.IsNullOrWhiteSpace(options.CachePath))
-            {
-                Directory.CreateDirectory(options.CachePath);
-                EbookManagerGlobals.CachePath = options.CachePath;
-            }
+            options.Validate();
         
             services.AddReaders();
             services.AddWriters();
@@ -49,4 +45,17 @@ public static class DependencyInjection
 public class EbookManagerOptions
 {
     public string CachePath { get; set; } = string.Empty;
+    public bool UseCustomScheme { get; set; } = true;
+    
+    public void Validate()
+    {
+        if (string.IsNullOrWhiteSpace(CachePath))
+        {
+            throw new ArgumentException("CachePath cannot be empty.");
+        }
+        
+        Directory.CreateDirectory(CachePath);
+        EbookManagerGlobals.CachePath = CachePath;
+        EbookManagerGlobals.UseCustomScheme = UseCustomScheme;
+    }
 }
