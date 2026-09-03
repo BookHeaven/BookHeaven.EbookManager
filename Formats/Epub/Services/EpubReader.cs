@@ -12,9 +12,10 @@ using BookHeaven.EbookManager.Extensions;
 using BookHeaven.EbookManager.Formats.Epub.XML;
 using HtmlAgilityPack;
 using HtmlAgilityPack.CssSelectors.NetCore;
+using Microsoft.Extensions.Options;
 
 namespace BookHeaven.EbookManager.Formats.Epub.Services;
-public partial class EpubReader : IEbookReader
+public partial class EpubReader(IOptions<EbookManagerOptions> options) : IEbookReader
 {
 	private static readonly ConcurrentDictionary<Type, XmlSerializer> Serializers = [];
 	private static readonly XmlReaderSettings XmlReaderSettings = new()
@@ -26,7 +27,7 @@ public partial class EpubReader : IEbookReader
 	private ZipArchive? _zipArchive;
 	private SemaphoreSlim? _zipLock;
 
-	private string _cacheFolderName = string.Empty;
+	private string? _cacheFolder;
 	private Package? _package;
 	private string? _rootFolder;
 	private string? _coverPath;
@@ -44,10 +45,7 @@ public partial class EpubReader : IEbookReader
 	
 	public async Task<Ebook> ReadAllAsync(string path)
 	{
-		if (!string.IsNullOrWhiteSpace(EbookManagerGlobals.CachePath))
-		{
-			_cacheFolderName = Path.GetFileNameWithoutExtension(path);
-		}
+		_cacheFolder = Path.GetFileNameWithoutExtension(path);
 		return await ReadAsync(path, false);
 	} 
 	
@@ -666,13 +664,13 @@ public partial class EpubReader : IEbookReader
 				if (string.IsNullOrEmpty(src)) continue;
 				var fileName = Path.GetFileName(src);
 				
-				var imagePath = Path.Combine(EbookManagerGlobals.CachePath, _cacheFolderName, fileName);
+				var imagePath = Path.Combine(options.Value.CachePath, _cacheFolder!, fileName);
 				if (!File.Exists(imagePath))
 				{
 					await ExtractEntryToFolderAsync(src, imagePath);
 				}
 
-				var finalUrl = "/cache/" + _cacheFolderName + "/" + fileName;
+				var finalUrl = "/cache/" + _cacheFolder + "/" + fileName;
 				if (EbookManagerGlobals.UseCustomScheme)
 				{
 					finalUrl = BookHeavenScheme.BuildUrl(finalUrl);
@@ -769,7 +767,7 @@ public partial class EpubReader : IEbookReader
 
     public void Dispose()
     {
-	    _cacheFolderName = string.Empty;
+	    _cacheFolder = null;
 	    _rootFolder = null;
 	    _package = null;
 	    _coverPath = null;
