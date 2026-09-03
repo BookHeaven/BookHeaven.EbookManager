@@ -2,7 +2,7 @@
 using BookHeaven.EbookManager.Enums;
 using Microsoft.Extensions.DependencyInjection;
 
-namespace BookHeaven.EbookManager.Formats;
+namespace BookHeaven.EbookManager.Services;
 
 public class EbookManagerProvider(IServiceProvider serviceProvider) : IEbookManagerProvider
 {

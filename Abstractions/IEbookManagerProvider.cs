@@ -1,7 +1,6 @@
-﻿using BookHeaven.EbookManager.Abstractions;
-using BookHeaven.EbookManager.Enums;
+﻿using BookHeaven.EbookManager.Enums;
 
-namespace BookHeaven.EbookManager.Formats;
+namespace BookHeaven.EbookManager.Abstractions;
 
 public interface IEbookManagerProvider
 {
