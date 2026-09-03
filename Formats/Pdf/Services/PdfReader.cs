@@ -7,10 +7,11 @@ using iText.Kernel.Pdf;
 using iText.Kernel.Pdf.Canvas.Parser;
 using iText.Kernel.Pdf.Canvas.Parser.Data;
 using iText.Kernel.Pdf.Canvas.Parser.Listener;
+using Microsoft.Extensions.Options;
 
 namespace BookHeaven.EbookManager.Formats.Pdf.Services;
 
-public class PdfReader : IEbookReader
+public class PdfReader(IOptions<EbookManagerOptions> options) : IEbookReader
 {
     
     public Task<Ebook> ReadMetadataAsync(string path)
@@ -59,11 +60,10 @@ public class PdfReader : IEbookReader
         var ebook = await ReadMetadataAsync(path);
         
         using var pdfDocument = new PdfDocument(new iText.Kernel.Pdf.PdfReader(path));
-        
         var documentContext = new PdfDocumentContext
         {
             Document = pdfDocument,
-            Identifier = Path.GetFileNameWithoutExtension(path)
+            CachePath = Path.Combine(options.Value.CachePath, Path.GetFileNameWithoutExtension(path))
         };
         // Get outlines (table of contents)
         var outlines = pdfDocument.GetOutlines(false);

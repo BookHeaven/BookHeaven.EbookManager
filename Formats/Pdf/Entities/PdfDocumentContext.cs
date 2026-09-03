@@ -4,8 +4,6 @@ namespace BookHeaven.EbookManager.Formats.Pdf.Entities;
 
 public class PdfDocumentContext
 {
-    public required PdfDocument Document { get; set; }
-    public required string Identifier { get; set; }
-    
-    public string CachePath => Path.Combine(EbookManagerGlobals.CachePath, Identifier);
+    public required PdfDocument Document { get; init; }
+    public required string CachePath { get; init; }
 }
