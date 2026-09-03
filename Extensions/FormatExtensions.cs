@@ -12,6 +12,13 @@ public static class FormatExtensions
         _ => throw new ArgumentOutOfRangeException(nameof(format), format, null)
     };
     
+    public static Format GetFormat(string extension) => extension.ToLower() switch
+    {
+        ".epub" => Format.Epub,
+        ".pdf" => Format.Pdf,
+        _ => throw new ArgumentOutOfRangeException(nameof(extension), extension, null)
+    };
+    
     public static string GetName(this Format format)
     {
         var type = format.GetType();
