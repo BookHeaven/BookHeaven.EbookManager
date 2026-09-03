@@ -1,5 +1,6 @@
 using BookHeaven.EbookManager.Abstractions;
 using BookHeaven.EbookManager.Enums;
+using BookHeaven.EbookManager.Formats;
 using BookHeaven.EbookManager.Formats.Epub.Services;
 using BookHeaven.EbookManager.Formats.Pdf.Services;
 using Microsoft.Extensions.DependencyInjection;
@@ -24,7 +25,7 @@ public static class DependencyInjection
         
             services.AddReaders();
             services.AddWriters();
-            services.AddSingleton<EbookManagerProvider>();
+            services.AddSingleton<IEbookManagerProvider, EbookManagerProvider>();
             return services;
         }
 

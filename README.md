@@ -14,9 +14,9 @@ builder.Services.AddEbookManager();
 You can optionally pass in a folder path as a parameter to use as a cache for temporary files (like extracted images).<br/>
 If no folder is provided, the images will be loaded into base64 strings instead, which may consume a lot of memory.
 
-2. Inject the EbookManagerProvider service and use it to get the appropriate reader or writer for your desired format at runtime.
+2. Inject the IEbookManagerProvider service and use it to get the appropriate reader or writer for your desired format at runtime.
 ```csharp
-public class MyService(EbookManagerProvider ebookManagerProvider)
+public class MyService(IEbookManagerProvider ebookManagerProvider)
 {
     private void MyMethod() 
     {
