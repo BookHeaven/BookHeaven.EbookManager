@@ -16,12 +16,13 @@ public static class DependencyInjection
         /// Registers the EpubManager services
         /// </summary>
         /// <param name="ebookManagerOptions">Options for the EpubManager</param>
-        public IServiceCollection AddEbookManager(Action<EbookManagerOptions>? ebookManagerOptions = null)
+        public IServiceCollection AddEbookManager(Action<EbookManagerOptions> ebookManagerOptions)
         {
             var options = new EbookManagerOptions();
-            ebookManagerOptions?.Invoke(options);
-
+            ebookManagerOptions.Invoke(options);
             options.Validate();
+            
+            services.Configure(ebookManagerOptions);
         
             services.AddReaders();
             services.AddWriters();
