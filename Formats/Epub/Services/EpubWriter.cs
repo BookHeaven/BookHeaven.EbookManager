@@ -6,14 +6,15 @@ using BookHeaven.EbookManager.Abstractions;
 using BookHeaven.EbookManager.Entities;
 using BookHeaven.EbookManager.Extensions;
 using BookHeaven.EbookManager.Formats.Epub.Constants;
+using Microsoft.Extensions.Options;
 
 namespace BookHeaven.EbookManager.Formats.Epub.Services;
 
-public class EpubWriter : IEbookWriter
+public class EpubWriter(IOptions<EbookManagerOptions> options) : IEbookWriter
 {
 	private async Task<(string path, string xml)> LoadOpfAsync(string bookPath)
 	{
-		using var reader = new EpubReader();
+		using var reader = new EpubReader(options);
 		var opfPath = await reader.GetOpfPathAsync(bookPath);
 		var xml = await reader.LoadFileContentAsync(opfPath);
 		return (opfPath, xml);
