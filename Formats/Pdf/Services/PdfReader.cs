@@ -63,7 +63,8 @@ public class PdfReader(IOptions<EbookManagerOptions> options) : IEbookReader
         var documentContext = new PdfDocumentContext
         {
             Document = pdfDocument,
-            CachePath = Path.Combine(options.Value.CachePath, Path.GetFileNameWithoutExtension(path))
+            CachePath = Path.Combine(options.Value.CachePath, Path.GetFileNameWithoutExtension(path)),
+            CacheUrl = Path.Combine("/cache", Path.GetFileNameWithoutExtension(path))
         };
         // Get outlines (table of contents)
         var outlines = pdfDocument.GetOutlines(false);

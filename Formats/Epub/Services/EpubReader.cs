@@ -670,12 +670,8 @@ public partial class EpubReader(IOptions<EbookManagerOptions> options) : IEbookR
 					await ExtractEntryToFolderAsync(src, imagePath);
 				}
 
-				var finalUrl = "/cache/" + _cacheFolder + "/" + fileName;
-				if (EbookManagerGlobals.UseCustomScheme)
-				{
-					finalUrl = BookHeavenScheme.BuildUrl(finalUrl);
-				}
-				imageNode.SetAttributeValue(attributeName, finalUrl);
+				var url = "/cache/" + _cacheFolder + "/" + fileName;
+				imageNode.SetAttributeValue(attributeName, url);
 				imageNode.SetAttributeValue("class", (imageNode.Attributes["class"]?.Value ?? "") + " zoomable");
 			}
 		}

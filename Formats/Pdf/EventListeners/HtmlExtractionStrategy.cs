@@ -80,11 +80,7 @@ internal class HtmlExtractionStrategy(PdfDocumentContext context, Rectangle page
                 }
                 else
                 {
-                    source = filename.Replace(EbookManagerGlobals.CachePath, "/cache");
-                    if (EbookManagerGlobals.UseCustomScheme)
-                    {
-                        source = BookHeavenScheme.BuildUrl(source);
-                    }
+                    source = Path.Combine(context.CacheUrl, $"{hash}.png");
                 }
                 
                 

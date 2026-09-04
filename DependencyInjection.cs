@@ -47,7 +47,6 @@ public static class DependencyInjection
 public class EbookManagerOptions
 {
     public string CachePath { get; set; } = string.Empty;
-    public bool UseCustomScheme { get; set; } = true;
     
     public void Validate()
     {
@@ -58,6 +57,5 @@ public class EbookManagerOptions
         
         Directory.CreateDirectory(CachePath);
         EbookManagerGlobals.CachePath = CachePath;
-        EbookManagerGlobals.UseCustomScheme = UseCustomScheme;
     }
 }
