@@ -75,7 +75,7 @@ public class Chapter
     public string Identifier { get; set; } = null!;
     public string? Title { get; set; }
     public string Content { get; set; } = string.Empty;
-    public List<string> Stylesheets { get; set; } = [];
+    public IReadOnlyList<string> Stylesheets { get; set; } = [];
     public string? ParagraphClassName { get; set; }
 }
 
