@@ -56,6 +56,5 @@ public class EbookManagerOptions
         }
         
         Directory.CreateDirectory(CachePath);
-        EbookManagerGlobals.CachePath = CachePath;
     }
 }
