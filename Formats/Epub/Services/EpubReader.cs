@@ -10,6 +10,7 @@ using BookHeaven.EbookManager.Abstractions;
 using BookHeaven.EbookManager.Entities;
 using BookHeaven.EbookManager.Extensions;
 using BookHeaven.EbookManager.Formats.Epub.XML;
+using BookHeaven.EbookManager.Helpers;
 using HtmlAgilityPack;
 using HtmlAgilityPack.CssSelectors.NetCore;
 using Microsoft.Extensions.Options;
@@ -361,7 +362,7 @@ public partial class EpubReader(IOptions<EbookManagerOptions> options) : IEbookR
 			{
 				css = css.Replace(fontFace.Value, null);
 			}
-			var processedCss = HtmlManager.ApplyCssProcessing(css);
+			var processedCss = HtmlHelpers.ApplyCssProcessing(css);
 			return new Stylesheet { Identifier = Path.GetFileNameWithoutExtension(item.Href), Content = processedCss  };
 		});
 		return await Task.WhenAll(cssTasks);
@@ -676,7 +677,7 @@ public partial class EpubReader(IOptions<EbookManagerOptions> options) : IEbookR
 			}
 		}
 
-		var processedHtml = HtmlManager.ApplyCssProcessing(content.OuterHtml);
+		var processedHtml = HtmlHelpers.ApplyCssProcessing(content.OuterHtml);
 		return processedHtml;
 	}
 

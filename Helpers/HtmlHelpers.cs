@@ -3,9 +3,9 @@ using System.Text.RegularExpressions;
 using HtmlAgilityPack;
 using HtmlAgilityPack.CssSelectors.NetCore;
 
-namespace BookHeaven.EbookManager;
+namespace BookHeaven.EbookManager.Helpers;
 
-internal static partial class HtmlManager
+internal static partial class HtmlHelpers
 {
     [GeneratedRegex(@"\d+\.?\d*")]
     private static partial Regex NumberRegex();
