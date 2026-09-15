@@ -44,13 +44,13 @@ public partial class EpubReader(IOptions<EbookManagerOptions> options) : IEbookR
 	{
 		return await ReadAsync(path);
 	}
-	
+
 	public async Task<Ebook> ReadAllAsync(string path)
 	{
 		_cacheFolder = Path.GetFileNameWithoutExtension(path);
 		return await ReadAsync(path, false);
-	} 
-	
+	}
+
 
 	/// <summary>
 	/// Reads the contents of an epub file. Already calls LoadEpub.
@@ -64,7 +64,7 @@ public partial class EpubReader(IOptions<EbookManagerOptions> options) : IEbookR
 		{
 			FilePath = path
 		};
-		
+
 		var packagePath = await GetOpfPathAsync(path);
 
 		try
@@ -89,7 +89,7 @@ public partial class EpubReader(IOptions<EbookManagerOptions> options) : IEbookR
 		{
 			if(metadataOnly) Dispose();
 		}
-			
+
 		return ebook;
 	}
 
@@ -331,7 +331,7 @@ public partial class EpubReader(IOptions<EbookManagerOptions> options) : IEbookR
 		}
 
 		content.TableOfContents = tableOfContents;
-		
+
 		content.Chapters = await MapSpineToChapters(tocContainsId: id => content.GetChapterFromTableOfContents(id) is not null);
 		ClearTransientCaches();
 
@@ -472,7 +472,7 @@ public partial class EpubReader(IOptions<EbookManagerOptions> options) : IEbookR
 			.Split(' ', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
 			.Contains(propertyName, StringComparer.OrdinalIgnoreCase);
 	}
-	
+
 	private async Task ExtractEntryToFolderAsync(string path, string destinationPath)
 	{
 		var absolutePath = GetAbsolutePath(path);
@@ -516,7 +516,7 @@ public partial class EpubReader(IOptions<EbookManagerOptions> options) : IEbookR
 		var manifestItems = _package.Manifest.Items.ToDictionary(static x => x.Id, static x => x, StringComparer.Ordinal);
 		var chapters = new List<Chapter>(_package.Spine.ItemRefs.Count);
 		var currentChapterId = string.Empty;
-		
+
 		foreach (var itemRef in _package.Spine.ItemRefs)
 		{
 			if (!manifestItems.TryGetValue(itemRef.IdRef, out var item))
@@ -534,8 +534,9 @@ public partial class EpubReader(IOptions<EbookManagerOptions> options) : IEbookR
 			document.LoadHtml(content);
 			var stylesheets = GetStylesheetsFromHtml(document);
 			var bodyNode = document.DocumentNode.SelectSingleNode("//body") ?? document.DocumentNode;
+			var paragraphClass = GetParagraphClass(bodyNode);
 			var processedContent = await ApplyHtmlProcessingAsync(bodyNode);
-			var paragraphClass = processedContent.Length == 0 ? null : GetParagraphClass(processedContent);
+			
 
 			chapters.Add(new Chapter
 			{
@@ -549,7 +550,7 @@ public partial class EpubReader(IOptions<EbookManagerOptions> options) : IEbookR
 
 		return chapters;
 	}
-		
+
 	/// <summary>
 	/// Gets the title of a chapter from the html document
 	/// </summary>
@@ -569,7 +570,7 @@ public partial class EpubReader(IOptions<EbookManagerOptions> options) : IEbookR
 			});
 		}
 	}
-		
+
 	/// <summary>
 	/// Gets the stylesheets referenced in the html
 	/// </summary>
@@ -582,19 +583,31 @@ public partial class EpubReader(IOptions<EbookManagerOptions> options) : IEbookR
 	}
 
 	/// <summary>
-	/// Tries to find the most common class in the html content, which is likely to be the paragraph class
+	/// Tries to find the class used by a majority of the text-containing paragraphs, which is likely to be the paragraph class
 	/// </summary>
-	/// <param name="content">Html</param>
+	/// <param name="content">Html node</param>
 	/// <returns>Name of the class</returns>
-	private static string? GetParagraphClass(string content)
+	private static string? GetParagraphClass(HtmlNode content)
 	{
-		const int minClassCount = 4;
-		
-		var matches = CssClassRegex().Matches(content);
-		var classFrequency = new Dictionary<string, int>();
-		foreach (Match match in matches)
+		const double majorityThreshold = 0.5;
+
+		var paragraphs = content.QuerySelectorAll("p");
+		if (paragraphs is null)
 		{
-			var classes = match.Groups[1].Value.Split(' ', StringSplitOptions.RemoveEmptyEntries);
+			return null;
+		}
+
+		var classFrequency = new Dictionary<string, int>();
+		var paragraphCount = 0;
+		foreach (var paragraph in paragraphs)
+		{
+			if (string.IsNullOrWhiteSpace(paragraph.InnerText))
+			{
+				continue;
+			}
+
+			paragraphCount++;
+			var classes = paragraph.GetAttributeValue("class", "").Split(' ', StringSplitOptions.RemoveEmptyEntries);
 			foreach (var className in classes)
 			{
 				if (!classFrequency.TryAdd(className, 1))
@@ -603,15 +616,24 @@ public partial class EpubReader(IOptions<EbookManagerOptions> options) : IEbookR
 				}
 			}
 		}
-		
-		return classFrequency.OrderByDescending(c => c.Value).FirstOrDefault(c => c.Value > minClassCount).Key;
+
+		if (paragraphCount == 0)
+		{
+			return null;
+		}
+
+		return classFrequency
+			.Where(c => c.Value > paragraphCount * majorityThreshold)
+			.OrderByDescending(c => c.Value)
+			.Select(c => c.Key)
+			.FirstOrDefault();
 	}
-	
+
 	public async Task<string> ApplyHtmlProcessingAsync(HtmlNode content)
 	{
 		if(string.IsNullOrEmpty(content.InnerHtml))
 			return string.Empty;
-		
+
 		var linkNodes = content.QuerySelectorAll("link[rel='stylesheet']");
 		if (linkNodes != null)
 		{
@@ -620,8 +642,8 @@ public partial class EpubReader(IOptions<EbookManagerOptions> options) : IEbookR
 				linkNode.Remove();
 			}
 		}
-		
-		
+
+
 		var divWithImageNodes = content.QuerySelectorAll("div > img:first-child:last-child");
 		if (divWithImageNodes != null)
 		{
@@ -630,8 +652,8 @@ public partial class EpubReader(IOptions<EbookManagerOptions> options) : IEbookR
 				divNode.ParentNode?.SetAttributeValue("style", "margin: 0 auto;text-align:center;");
 			}
 		}
-		
-		var spans = content.QuerySelectorAll("p span:first-child");
+
+		var spans = content.QuerySelectorAll("p > span:first-child");
 		foreach (var span in spans)
 		{
 			if(span is not { InnerText.Length: 1 }) continue;
@@ -646,7 +668,7 @@ public partial class EpubReader(IOptions<EbookManagerOptions> options) : IEbookR
 				parent = parent.ParentNode;
 			}
 			parent!.SetAttributeValue("class", (parent.Attributes["class"]?.Value ?? "") + " drop-cap");
-			
+
 			foreach (var node in elementsToRemove)
 			{
 				node.Remove();
@@ -654,7 +676,7 @@ public partial class EpubReader(IOptions<EbookManagerOptions> options) : IEbookR
 			parent.InnerHtml = letter + parent.InnerHtml;
 			break;
 		}
-		
+
 		var imageNodes = content.QuerySelectorAll("img, image");
 		if (imageNodes != null)
 		{
@@ -665,26 +687,26 @@ public partial class EpubReader(IOptions<EbookManagerOptions> options) : IEbookR
 				var src = imageNode.Attributes.FirstOrDefault(a => a.Name == attributeName || a.Name.EndsWith(attributeName))?.Value;
 				if (string.IsNullOrEmpty(src)) continue;
 				var fileName = Path.GetFileName(src);
-				
+
 				var imagePath = Path.Combine(options.Value.CachePath, _cacheFolder!, fileName);
 				if (!File.Exists(imagePath))
 				{
 					await ExtractEntryToFolderAsync(src, imagePath);
 				}
-				if (!imageNode.Attributes.Contains("width"))
+				/*if (imageNode.Name == "img" && !imageNode.Attributes.Contains("width"))
 				{
 					var (width, height) = await GetImageDimensionsAsync(imagePath);
 					imageNode.SetAttributeValue("width", width.ToString());
 					imageNode.SetAttributeValue("height", height.ToString());
-				}
-				
+				}*/
+
 				var url = "/cache/" + _cacheFolder + "/" + fileName;
 				imageNode.SetAttributeValue(attributeName, url);
 				imageNode.SetAttributeValue("class", (imageNode.Attributes["class"]?.Value ?? "") + " zoomable");
 			}
 		}
 
-		var processedHtml = HtmlHelpers.ApplyCssProcessing(content.OuterHtml);
+		var processedHtml = HtmlHelpers.ApplyCssProcessing(content.InnerHtml);
 		return processedHtml;
 	}
 
@@ -702,8 +724,8 @@ public partial class EpubReader(IOptions<EbookManagerOptions> options) : IEbookR
 	/// <param name="path">Path inside the epub</param>
 	/// <returns>Cleaned path</returns>
 	private string? CleanPath(string? path) => path != null && path.Contains('#') ? path[..path.IndexOf('#')] : path;
-	
-	
+
+
 	/// <summary>
 	/// Loads the content of a file inside the epub
 	/// </summary>
@@ -751,7 +773,7 @@ public partial class EpubReader(IOptions<EbookManagerOptions> options) : IEbookR
 		using var reader = new StreamReader(memory, Encoding.UTF8, true);
 		return await reader.ReadToEndAsync();
 	}
-	
+
 	/// <summary>
 	/// Loads the nav file from the epub
 	/// </summary>
@@ -772,8 +794,6 @@ public partial class EpubReader(IOptions<EbookManagerOptions> options) : IEbookR
 	private static partial Regex CssImportRegex();
 	[GeneratedRegex(@"@font-face\s*{[^}]+}")]
 	private static partial Regex FontFaceRegex();
-	[GeneratedRegex(@"class\s*=\s*[""']([^""']+)[""']", RegexOptions.IgnoreCase, "es-ES")]
-	private static partial Regex CssClassRegex();
 	[GeneratedRegex("&#([0-9]+);")]
 	private static partial Regex NumericEntitiesRegex();
 
