@@ -653,29 +653,7 @@ public partial class EpubReader(IOptions<EbookManagerOptions> options) : IEbookR
 			}
 		}
 
-		var spans = content.QuerySelectorAll("p > span:first-child");
-		foreach (var span in spans)
-		{
-			if(span is not { InnerText.Length: 1 }) continue;
-			var letter = span.InnerText;
-			var elementsToRemove = new List<HtmlNode> { span };
-
-			var parent = span.ParentNode;
-			while (parent?.Name != "p")
-			{
-				if(parent is null) break;
-				elementsToRemove.Add(parent);
-				parent = parent.ParentNode;
-			}
-			parent!.SetAttributeValue("class", (parent.Attributes["class"]?.Value ?? "") + " drop-cap");
-
-			foreach (var node in elementsToRemove)
-			{
-				node.Remove();
-			}
-			parent.InnerHtml = letter + parent.InnerHtml;
-			break;
-		}
+		DropCapHelper.ConvertDropCaps(content);
 
 		var imageNodes = content.QuerySelectorAll("img, image");
 		if (imageNodes != null)
