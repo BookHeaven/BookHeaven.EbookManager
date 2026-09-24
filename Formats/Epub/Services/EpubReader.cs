@@ -680,12 +680,6 @@ public partial class EpubReader(IOptions<EbookManagerOptions> options) : IEbookR
 				{
 					await ExtractEntryToFolderAsync(src, imagePath);
 				}
-				/*if (imageNode.Name == "img" && !imageNode.Attributes.Contains("width"))
-				{
-					var (width, height) = await GetImageDimensionsAsync(imagePath);
-					imageNode.SetAttributeValue("width", width.ToString());
-					imageNode.SetAttributeValue("height", height.ToString());
-				}*/
 
 				var url = "/cache/" + _cacheFolder + "/" + fileName;
 				imageNode.SetAttributeValue(attributeName, url);
@@ -695,14 +689,6 @@ public partial class EpubReader(IOptions<EbookManagerOptions> options) : IEbookR
 
 		var processedHtml = HtmlHelpers.ApplyCssProcessing(content.InnerHtml);
 		return processedHtml;
-	}
-
-	private static async Task<(int width, int height)> GetImageDimensionsAsync(string imagePath)
-	{
-		await using var fs = File.OpenRead(imagePath);
-		using var stream = new SKManagedStream(fs);
-		using var codec = SKCodec.Create(stream);
-		return (codec.Info.Width, codec.Info.Height);
 	}
 
 	/// <summary>
