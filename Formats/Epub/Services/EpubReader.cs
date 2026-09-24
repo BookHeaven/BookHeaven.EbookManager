@@ -14,7 +14,6 @@ using BookHeaven.EbookManager.Helpers;
 using HtmlAgilityPack;
 using HtmlAgilityPack.CssSelectors.NetCore;
 using Microsoft.Extensions.Options;
-using SkiaSharp;
 
 namespace BookHeaven.EbookManager.Formats.Epub.Services;
 public partial class EpubReader(IOptions<EbookManagerOptions> options) : IEbookReader
