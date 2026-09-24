@@ -633,6 +633,15 @@ public partial class EpubReader(IOptions<EbookManagerOptions> options) : IEbookR
 	{
 		if(string.IsNullOrEmpty(content.InnerHtml))
 			return string.Empty;
+		
+		var scriptNodes = content.QuerySelectorAll("script");
+		if (scriptNodes != null)
+		{
+			foreach (var scriptNode in scriptNodes)
+			{
+				scriptNode.Remove();
+			}
+		}
 
 		var linkNodes = content.QuerySelectorAll("link[rel='stylesheet']");
 		if (linkNodes != null)
