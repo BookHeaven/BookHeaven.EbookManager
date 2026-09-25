@@ -167,9 +167,4 @@ public class PdfReader(IOptions<EbookManagerOptions> options) : IEbookReader
             }
         }
     }
-
-    public void Dispose()
-    {
-        GC.SuppressFinalize(this);
-    }
 }

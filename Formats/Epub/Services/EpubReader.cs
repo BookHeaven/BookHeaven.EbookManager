@@ -77,7 +77,7 @@ public partial class EpubReader(IOptions<EbookManagerOptions> options) : IEbookR
 		}
 		finally
 		{
-			if(metadataOnly) Dispose();
+			ResetState();
 		}
 
 		return ebook;
@@ -87,7 +87,7 @@ public partial class EpubReader(IOptions<EbookManagerOptions> options) : IEbookR
 	/// Gets the path to the OPF file inside the epub
 	/// </summary>
 	/// <returns>OPF path</returns>
-	public async Task<string> GetOpfPathAsync(string epubPath)
+	internal async Task<string> GetOpfPathAsync(string epubPath)
 	{
 		_zipArchive = await ZipFile.OpenReadAsync(epubPath);
 		_zipLock = new(1, 1);
@@ -862,7 +862,7 @@ public partial class EpubReader(IOptions<EbookManagerOptions> options) : IEbookR
 	/// <param name="path">Path inside the epub</param>
 	/// <returns>Content as string</returns>
 	/// <exception cref="Exception"></exception>
-	public async Task<string> LoadFileContentAsync(string path)
+	internal async Task<string> LoadFileContentAsync(string path)
 	{
 		if (_zipLock is null)
 		{
@@ -918,7 +918,11 @@ public partial class EpubReader(IOptions<EbookManagerOptions> options) : IEbookR
 	[GeneratedRegex("&#([0-9]+);")]
 	private static partial Regex NumericEntitiesRegex();
 
-    public void Dispose()
+    /// <summary>
+    /// Releases the zip archive and clears all transient state so the reader can be reused
+    /// for a different file. Called automatically after every public read operation.
+    /// </summary>
+    internal void ResetState()
     {
 	    _cacheFolder = null;
 	    _rootFolder = null;
@@ -926,7 +930,8 @@ public partial class EpubReader(IOptions<EbookManagerOptions> options) : IEbookR
 	    _coverPath = null;
 	    ClearTransientCaches();
 	    _zipArchive?.Dispose();
+	    _zipArchive = null;
 	    _zipLock?.Dispose();
-	    GC.SuppressFinalize(this);
+	    _zipLock = null;
     }
 }

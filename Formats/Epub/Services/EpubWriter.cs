@@ -14,10 +14,17 @@ public class EpubWriter(IOptions<EbookManagerOptions> options) : IEbookWriter
 {
 	private async Task<(string path, string xml)> LoadOpfAsync(string bookPath)
 	{
-		using var reader = new EpubReader(options);
-		var opfPath = await reader.GetOpfPathAsync(bookPath);
-		var xml = await reader.LoadFileContentAsync(opfPath);
-		return (opfPath, xml);
+		var reader = new EpubReader(options);
+		try
+		{
+			var opfPath = await reader.GetOpfPathAsync(bookPath);
+			var xml = await reader.LoadFileContentAsync(opfPath);
+			return (opfPath, xml);
+		}
+		finally
+		{
+			reader.ResetState();
+		}
 	}
 	    
 	public async Task ReplaceMetadataAsync(string bookPath, Ebook ebook)
