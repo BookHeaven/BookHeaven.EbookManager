@@ -26,8 +26,14 @@ internal static class DropCapHelper
             if (candidate is null)
                 continue;
 
-            if (!IsSingleLetter(candidate) || !HasSufficientText(paragraph) || IsRepeatedInParagraph(candidate, paragraph))
+            if (!IsSingleLetter(candidate) || IsRepeatedInParagraph(candidate, paragraph))
                 continue;
+            
+            if(!HasSufficientText(paragraph))
+            {
+                Normalize(candidate, paragraph);
+                return;
+            }
 
             Convert(candidate, paragraph);
             return;
@@ -98,7 +104,7 @@ internal static class DropCapHelper
         if (node.FirstChild is null)
             return false;
 
-        return node.ChildNodes.All(child => IsSpan(child));
+        return node.ChildNodes.All(IsSpan);
     }
 
     private static bool IsSingleLetter(HtmlNode span)
@@ -134,6 +140,15 @@ internal static class DropCapHelper
         paragraph.SetAttributeValue("class", AppendClass(paragraph.GetAttributeValue("class", null), "drop-cap"));
 
         // Text node (not raw HTML) so the letter is always escaped correctly.
+        var letterNode = paragraph.OwnerDocument.CreateTextNode(letter);
+        paragraph.InsertBefore(letterNode, paragraph.FirstChild);
+    }
+
+    private static void Normalize(HtmlNode span, HtmlNode paragraph)
+    {
+        var letter = span.InnerText;
+        span.Remove();
+        
         var letterNode = paragraph.OwnerDocument.CreateTextNode(letter);
         paragraph.InsertBefore(letterNode, paragraph.FirstChild);
     }
