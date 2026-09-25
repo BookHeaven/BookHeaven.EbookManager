@@ -28,14 +28,8 @@ internal static class DropCapHelper
 
             if (!IsSingleLetter(candidate) || IsRepeatedInParagraph(candidate, paragraph))
                 continue;
-            
-            if(!HasSufficientText(paragraph))
-            {
-                Normalize(candidate, paragraph);
-                return;
-            }
 
-            Convert(candidate, paragraph);
+            Convert(candidate, paragraph, normalize: !HasSufficientText(paragraph));
             return;
         }
     }
@@ -133,22 +127,16 @@ internal static class DropCapHelper
         return spans.Count(s => string.Equals(s.GetAttributeValue("class", null), className, StringComparison.OrdinalIgnoreCase)) > 1;
     }
 
-    private static void Convert(HtmlNode span, HtmlNode paragraph)
+    private static void Convert(HtmlNode span, HtmlNode paragraph, bool normalize = false)
     {
         var letter = span.InnerText;
         span.Remove();
-        paragraph.SetAttributeValue("class", AppendClass(paragraph.GetAttributeValue("class", null), "drop-cap"));
-
-        // Text node (not raw HTML) so the letter is always escaped correctly.
-        var letterNode = paragraph.OwnerDocument.CreateTextNode(letter);
-        paragraph.InsertBefore(letterNode, paragraph.FirstChild);
-    }
-
-    private static void Normalize(HtmlNode span, HtmlNode paragraph)
-    {
-        var letter = span.InnerText;
-        span.Remove();
+        if (!normalize)
+        {
+            paragraph.SetAttributeValue("class", AppendClass(paragraph.GetAttributeValue("class", null), "drop-cap"));
+        }
         
+        // Text node (not raw HTML) so the letter is always escaped correctly.
         var letterNode = paragraph.OwnerDocument.CreateTextNode(letter);
         paragraph.InsertBefore(letterNode, paragraph.FirstChild);
     }
