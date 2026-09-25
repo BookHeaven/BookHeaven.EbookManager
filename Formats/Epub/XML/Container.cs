@@ -1,4 +1,5 @@
-﻿using System.Xml.Serialization;
+﻿using System.Xml.Linq;
+using System.Xml.Serialization;
 using BookHeaven.EbookManager.Formats.Epub.Constants;
 
 namespace BookHeaven.EbookManager.Formats.Epub.XML;
@@ -8,6 +9,25 @@ public class Container
 {
 	[XmlElement("rootfiles")]
 	public RootFiles RootFiles { get; set; } = null!;
+
+	public static Container Parse(XDocument document)
+	{
+		var rootFiles = new RootFiles { RootFile = [] };
+		var rootfiles = document.Root?.Elements(Namespaces.ContainerNs + "rootfiles").FirstOrDefault();
+		if (rootfiles is not null)
+		{
+			foreach (var rootfile in rootfiles.Elements(Namespaces.ContainerNs + "rootfile"))
+			{
+				rootFiles.RootFile.Add(new RootFile
+				{
+					FullPath = rootfile.Attribute("full-path")?.Value ?? string.Empty,
+					MediaType = rootfile.Attribute("media-type")?.Value ?? string.Empty
+				});
+			}
+		}
+
+		return new Container { RootFiles = rootFiles };
+	}
 }
 
 public class RootFiles

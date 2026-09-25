@@ -1,4 +1,5 @@
 ﻿using System.Xml;
+using System.Xml.Linq;
 using System.Xml.Serialization;
 using BookHeaven.EbookManager.Formats.Epub.Constants;
 
@@ -9,6 +10,58 @@ public class Nav
 {
     [XmlElement("ol")]
     public List<NavOl> ChapterList { get; set; } = [];
+
+    public static Nav Parse(XDocument document)
+    {
+        var navElement = document.Descendants().FirstOrDefault(x => x.Name.LocalName == "nav")
+            ?? throw new Exception("Could not find navigation content in epub file.");
+
+        var nav = new Nav
+        {
+            ChapterList = [.. navElement.Elements(Namespaces.XhtmlNs + "ol").Select(ParseOl)]
+        };
+        return nav;
+    }
+
+    private static NavOl ParseOl(XElement ol)
+    {
+        var navOl = new NavOl
+        {
+            Chapter = [.. ol.Elements(Namespaces.XhtmlNs + "li").Select(ParseLi)]
+        };
+        return navOl;
+    }
+
+    private static NavLi ParseLi(XElement li)
+    {
+        var navLi = new NavLi();
+
+        var link = li.Element(Namespaces.XhtmlNs + "a");
+        if (link is not null)
+        {
+            navLi.Link = new NavA
+            {
+                Href = link.Attribute("href")?.Value ?? string.Empty,
+                Title = link.Attribute("title")?.Value,
+                SimpleText = link.Value
+            };
+        }
+
+        var label = li.Element(Namespaces.XhtmlNs + "span");
+        if (label is not null)
+        {
+            navLi.Label = new NavSpan { Text = label.Value };
+        }
+
+        var childOls = li.Elements(Namespaces.XhtmlNs + "ol");
+        var xElements = childOls as XElement[] ?? [.. childOls];
+        if (xElements.Length != 0)
+        {
+            navLi.ChapterList = [.. xElements.Select(ParseOl)];
+        }
+
+        return navLi;
+    }
 }
 
 public class NavOl

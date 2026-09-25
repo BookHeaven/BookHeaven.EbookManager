@@ -51,6 +51,21 @@ internal static partial class HtmlHelpers
     private static readonly Dictionary<string, CssProperty> CssPropertyLookup =
 	    CustomStyles.ToDictionary(static p => p.Property, StringComparer.Ordinal);
     
+    /// <summary>
+    /// Cheap, allocation-free pre-check: does <paramref name="css"/> contain any property that
+    /// <see cref="ApplyCssProcessing"/> would rewrite? Used to skip the regex for the common case
+    /// where a style has none of the target properties.
+    /// </summary>
+    public static bool HasTargetProperty(string css)
+        => css.Contains("margin", StringComparison.Ordinal)
+        || css.Contains("line-height", StringComparison.Ordinal)
+        || css.Contains("text-indent", StringComparison.Ordinal)
+        || css.Contains("font-size", StringComparison.Ordinal)
+        || css.Contains("font-family", StringComparison.Ordinal)
+        || css.Contains("widows", StringComparison.Ordinal)
+        || css.Contains("orphans", StringComparison.Ordinal)
+        || css.Contains("padding", StringComparison.Ordinal);
+
     public static string ApplyCssProcessing(string contentString)
     {
         if (string.IsNullOrEmpty(contentString))

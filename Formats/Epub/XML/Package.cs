@@ -1,4 +1,5 @@
-﻿using System.Xml.Serialization;
+using System.Xml.Linq;
+using System.Xml.Serialization;
 using BookHeaven.EbookManager.Formats.Epub.Constants;
 
 namespace BookHeaven.EbookManager.Formats.Epub.XML;
@@ -23,6 +24,123 @@ public class Package
 
 	[XmlElement("guide")]
 	public Guide? Guide { get; set; }
+
+	public static Package Parse(XDocument document)
+	{
+		var root = document.Root ?? throw new Exception("Empty package document.");
+		var package = new Package
+		{
+			Version = GetAttr(root, "version") ?? string.Empty,
+			UniqueIdentifier = GetAttr(root, "unique-identifier") ?? string.Empty
+		};
+
+		var metadataElement = root.Element(Namespaces.OpfNs + "metadata");
+		package.Metadata = metadataElement is null ? new Metadata() : ParseMetadata(metadataElement);
+
+		var manifest = new Manifest { Items = [] };
+		var manifestElement = root.Element(Namespaces.OpfNs + "manifest");
+		if (manifestElement is not null)
+		{
+			foreach (var item in manifestElement.Elements(Namespaces.OpfNs + "item"))
+			{
+				manifest.Items.Add(new Item
+				{
+					Id = GetAttr(item, "id") ?? string.Empty,
+					Href = GetAttr(item, "href") ?? string.Empty,
+					MediaType = GetAttr(item, "media-type") ?? string.Empty,
+					Properties = GetAttr(item, "properties")
+				});
+			}
+		}
+		package.Manifest = manifest;
+
+		var spine = new Spine { ItemRefs = [] };
+		var spineElement = root.Element(Namespaces.OpfNs + "spine");
+		if (spineElement is not null)
+		{
+			spine.Toc = GetAttr(spineElement, "toc");
+			foreach (var itemRef in spineElement.Elements(Namespaces.OpfNs + "itemref"))
+			{
+				spine.ItemRefs.Add(new ItemRef
+				{
+					IdRef = GetAttr(itemRef, "idref") ?? string.Empty,
+					Linear = GetAttr(itemRef, "linear") ?? string.Empty
+				});
+			}
+		}
+		package.Spine = spine;
+
+		var guideElement = root.Element(Namespaces.OpfNs + "guide");
+		if (guideElement is not null)
+		{
+			var guide = new Guide();
+			foreach (var reference in guideElement.Elements(Namespaces.OpfNs + "reference"))
+			{
+				guide.References.Add(new Reference
+				{
+					Href = GetAttr(reference, "href") ?? string.Empty,
+					Type = GetAttr(reference, "type") ?? string.Empty,
+					Title = GetAttr(reference, "title") ?? string.Empty
+				});
+			}
+			package.Guide = guide;
+		}
+
+		return package;
+	}
+
+	private static Metadata ParseMetadata(XElement metadataElement)
+	{
+		var metadata = new Metadata();
+
+		metadata.Titles = ReadTextList(metadataElement, "title");
+		metadata.Languages = ReadTextList(metadataElement, "language");
+		metadata.Identifiers = metadataElement.Elements(Namespaces.DcNs + "identifier").Select(e => new Identifier
+		{
+			Id = GetAttr(e, "id") ?? string.Empty,
+			Scheme = GetAttr(e, "scheme") ?? string.Empty,
+			Value = e.Value
+		}).ToList();
+		metadata.Creators = ReadPeople(metadataElement, "creator", (fileAs, name, role) => new Creator { FileAs = fileAs, Name = name, Role = role });
+		metadata.Contributors = ReadPeople(metadataElement, "contributor", (fileAs, name, role) => new Contributor { FileAs = fileAs, Name = name, Role = role });
+		metadata.Publishers = ReadTextList(metadataElement, "publisher");
+		metadata.Dates = ReadTextList(metadataElement, "date").Select(s => (string?)s).ToList();
+		metadata.Rights = ReadTextList(metadataElement, "rights");
+		metadata.Subjects = ReadTextList(metadataElement, "subject");
+		metadata.Types = ReadTextList(metadataElement, "type");
+		metadata.Descriptions = ReadTextList(metadataElement, "description");
+
+		metadata.Meta = metadataElement.Elements(Namespaces.OpfNs + "meta").Select(e => new Meta
+		{
+			Name = GetAttr(e, "name"),
+			Property = GetAttr(e, "property"),
+			Content = GetAttr(e, "content"),
+			Value = e.Value
+		}).ToList();
+
+		return metadata;
+	}
+
+	private static List<string> ReadTextList(XElement parent, string localName)
+	{
+		var elements = parent.Elements(Namespaces.DcNs + localName);
+		return elements.Any() ? elements.Select(e => e.Value).ToList() : [];
+	}
+
+	private static List<T> ReadPeople<T>(XElement parent, string localName, Func<string?, string, string?, T> factory)
+	{
+		var elements = parent.Elements(Namespaces.DcNs + localName);
+		return elements.Any()
+			? elements.Select(e => factory(GetAttr(e, "file-as"), e.Value, GetAttr(e, "role"))).ToList()
+			: [];
+	}
+
+	/// <summary>
+	/// Reads an attribute that may be declared without a namespace (the common case)
+	/// or in the OPF namespace (e.g. <c>opf:role</c> in EPUB 2 files).
+	/// </summary>
+	private static string? GetAttr(XElement element, string name)
+		=> element.Attribute(name)?.Value ?? element.Attribute(Namespaces.OpfNs + name)?.Value;
 }
 
 public class Metadata

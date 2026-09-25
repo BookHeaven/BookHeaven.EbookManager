@@ -14,16 +14,12 @@ internal static class DropCapHelper
     private const int MinParagraphLength = 40;
 
     /// <summary>
-    /// Converts the first drop-cap found in <paramref name="content"/>.
+    /// Converts the first drop-cap found among <paramref name="paragraphs"/>.
     /// The converted paragraph gets the <c>drop-cap</c> class and the letter is inlined.
     /// </summary>
-    /// <param name="content">Root node of the chapter content.</param>
-    public static void ConvertDropCaps(HtmlNode content)
+    /// <param name="paragraphs">Collected paragraph elements of the chapter body.</param>
+    public static void ConvertDropCaps(IEnumerable<HtmlNode> paragraphs)
     {
-        var paragraphs = content.SelectNodes("//p");
-        if (paragraphs is null)
-            return;
-
         foreach (var paragraph in paragraphs)
         {
             var candidate = GetLeadingSpan(paragraph);
@@ -36,6 +32,22 @@ internal static class DropCapHelper
             Convert(candidate, paragraph);
             return;
         }
+    }
+
+    /// <summary>
+    /// Convenience overload that selects all paragraphs from <paramref name="content"/>
+    /// and converts the first drop-cap found.
+    /// </summary>
+    public static void ConvertDropCaps(HtmlNode content)
+    {
+        var paragraphs = content.SelectNodes("//p");
+        if (paragraphs is null)
+        {
+            ConvertDropCaps([]);
+            return;
+        }
+
+        ConvertDropCaps(paragraphs);
     }
 
     /// <summary>
