@@ -29,7 +29,7 @@ internal static class DropCapHelper
             if (!IsSingleLetter(candidate) || IsRepeatedInParagraph(candidate, paragraph))
                 continue;
 
-            Convert(candidate, paragraph, normalize: !HasSufficientText(paragraph));
+            Convert(candidate, paragraph);
             return;
         }
     }
@@ -127,14 +127,11 @@ internal static class DropCapHelper
         return spans.Count(s => string.Equals(s.GetAttributeValue("class", null), className, StringComparison.OrdinalIgnoreCase)) > 1;
     }
 
-    private static void Convert(HtmlNode span, HtmlNode paragraph, bool normalize = false)
+    private static void Convert(HtmlNode span, HtmlNode paragraph)
     {
         var letter = span.InnerText;
         span.Remove();
-        if (!normalize)
-        {
-            paragraph.SetAttributeValue("class", AppendClass(paragraph.GetAttributeValue("class", null), "drop-cap"));
-        }
+        //paragraph.SetAttributeValue("class", AppendClass(paragraph.GetAttributeValue("class", null), "drop-cap"));
         
         // Text node (not raw HTML) so the letter is always escaped correctly.
         var letterNode = paragraph.OwnerDocument.CreateTextNode(letter);
