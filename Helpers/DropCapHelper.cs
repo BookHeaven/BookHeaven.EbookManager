@@ -5,6 +5,8 @@ namespace BookHeaven.EbookManager.Helpers;
 /// <summary>
 /// Converts drop-caps made with a leading single-letter <c>span</c> into the modern
 /// <c>.drop-cap</c> class (rendered with <c>initial-letter</c>).
+/// Two-character spans are also accepted when they start with an opening
+/// punctuation mark (e.g. <c>¡A</c>, <c>¿Q</c> in Spanish).
 /// A paragraph is only converted when the same span (same class) is not repeated
 /// elsewhere in it, which marks decorative or bulleted patterns rather than drop-caps.
 /// </summary>
@@ -26,7 +28,7 @@ internal static class DropCapHelper
             if (candidate is null)
                 continue;
 
-            if (!IsSingleLetter(candidate) || IsRepeatedInParagraph(candidate, paragraph))
+            if (!IsDropCapText(candidate) || IsRepeatedInParagraph(candidate, paragraph))
                 continue;
 
             Convert(candidate, paragraph);
@@ -101,11 +103,21 @@ internal static class DropCapHelper
         return node.ChildNodes.All(IsSpan);
     }
 
-    private static bool IsSingleLetter(HtmlNode span)
+    /// <summary>
+    /// A drop-cap is a single letter, or a letter preceded by an opening
+    /// punctuation mark (e.g. <c>¡A</c>, <c>¿Q</c> in Spanish).
+    /// </summary>
+    private static bool IsDropCapText(HtmlNode span)
     {
         var text = span.InnerText;
-        return text.Length == 1 && char.IsLetter(text[0]);
+        if (text.Length == 1)
+            return char.IsLetter(text[0]);
+
+        return text.Length == 2 && IsOpeningPunctuation(text[0]) && char.IsLetter(text[1]);
     }
+
+    private static bool IsOpeningPunctuation(char c)
+        => c is '¡' or '¿';
 
     private static bool HasSufficientText(HtmlNode paragraph)
         => paragraph.InnerText.Trim().Length >= MinParagraphLength;
