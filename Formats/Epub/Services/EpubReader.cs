@@ -444,7 +444,8 @@ public partial class EpubReader(IOptions<EbookManagerOptions> options) : IEbookR
 		}
 
 		return _package?.Manifest.Items.FirstOrDefault(x =>
-			string.Equals(NormalizeArchivePath(CleanPath(x.Href) ?? string.Empty), target, StringComparison.OrdinalIgnoreCase))?.Id;
+			string.Equals(NormalizeArchivePath(CleanPath(x.Href) ?? string.Empty), target, StringComparison.OrdinalIgnoreCase) ||
+			string.Equals(x.Id, target, StringComparison.OrdinalIgnoreCase))?.Id;
 	}
 
 	private static bool HasProperty(Item item, string propertyName)
@@ -907,9 +908,9 @@ public partial class EpubReader(IOptions<EbookManagerOptions> options) : IEbookR
 	/// <returns>Nav object</returns>
 	private async Task<Nav> LoadNavAsync(string path)
 	{
-			var content = await LoadFileContentAsync(path);
-			return Nav.Parse(XDocument.Parse(content));
-		}
+		var content = await LoadFileContentAsync(path);
+		return Nav.Parse(XDocument.Parse(content));
+	}
 
 	[GeneratedRegex(@"@import\s*[^;]+;")]
 	private static partial Regex CssImportRegex();
