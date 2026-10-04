@@ -93,7 +93,7 @@ internal static class DropCapHelper
     }
 
     private static bool IsSpan(HtmlNode node)
-        => node.NodeType == HtmlNodeType.Element && node.Name == "span";
+        => node is { NodeType: HtmlNodeType.Element, Name: "span" };
 
     private static bool IsAllSpanChildren(HtmlNode node)
     {
