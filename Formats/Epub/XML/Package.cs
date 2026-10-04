@@ -91,47 +91,53 @@ public class Package
 
 	private static Metadata ParseMetadata(XElement metadataElement)
 	{
-		var metadata = new Metadata();
-
-		metadata.Titles = ReadTextList(metadataElement, "title");
-		metadata.Languages = ReadTextList(metadataElement, "language");
-		metadata.Identifiers = metadataElement.Elements(Namespaces.DcNs + "identifier").Select(e => new Identifier
+		var metadata = new Metadata
 		{
-			Id = GetAttr(e, "id") ?? string.Empty,
-			Scheme = GetAttr(e, "scheme") ?? string.Empty,
-			Value = e.Value
-		}).ToList();
-		metadata.Creators = ReadPeople(metadataElement, "creator", (fileAs, name, role) => new Creator { FileAs = fileAs, Name = name, Role = role });
-		metadata.Contributors = ReadPeople(metadataElement, "contributor", (fileAs, name, role) => new Contributor { FileAs = fileAs, Name = name, Role = role });
-		metadata.Publishers = ReadTextList(metadataElement, "publisher");
-		metadata.Dates = ReadTextList(metadataElement, "date").Select(s => (string?)s).ToList();
-		metadata.Rights = ReadTextList(metadataElement, "rights");
-		metadata.Subjects = ReadTextList(metadataElement, "subject");
-		metadata.Types = ReadTextList(metadataElement, "type");
-		metadata.Descriptions = ReadTextList(metadataElement, "description");
-
-		metadata.Meta = metadataElement.Elements(Namespaces.OpfNs + "meta").Select(e => new Meta
-		{
-			Name = GetAttr(e, "name"),
-			Property = GetAttr(e, "property"),
-			Content = GetAttr(e, "content"),
-			Value = e.Value
-		}).ToList();
+			Titles = ReadTextList(metadataElement, "title"),
+			Languages = ReadTextList(metadataElement, "language"),
+			Identifiers =
+			[
+				.. metadataElement.Elements(Namespaces.DcNs + "identifier").Select(e => new Identifier
+				{
+					Id = GetAttr(e, "id") ?? string.Empty,
+					Scheme = GetAttr(e, "scheme") ?? string.Empty,
+					Value = e.Value
+				})
+			],
+			Creators = ReadPeople(metadataElement, "creator", (fileAs, name, role) => new Creator { FileAs = fileAs, Name = name, Role = role }),
+			Contributors = ReadPeople(metadataElement, "contributor", (fileAs, name, role) => new Contributor { FileAs = fileAs, Name = name, Role = role }),
+			Publishers = ReadTextList(metadataElement, "publisher"),
+			Dates = ReadTextList(metadataElement, "date").Select(s => (string?)s).ToList(),
+			Rights = ReadTextList(metadataElement, "rights"),
+			Subjects = ReadTextList(metadataElement, "subject"),
+			Types = ReadTextList(metadataElement, "type"),
+			Descriptions = ReadTextList(metadataElement, "description"),
+			Meta =
+			[
+				.. metadataElement.Elements(Namespaces.OpfNs + "meta").Select(e => new Meta
+				{
+					Name = GetAttr(e, "name"),
+					Property = GetAttr(e, "property"),
+					Content = GetAttr(e, "content"),
+					Value = e.Value
+				})
+			]
+		};
 
 		return metadata;
 	}
 
 	private static List<string> ReadTextList(XElement parent, string localName)
 	{
-		var elements = parent.Elements(Namespaces.DcNs + localName);
-		return elements.Any() ? elements.Select(e => e.Value).ToList() : [];
+		var elements = parent.Elements(Namespaces.DcNs + localName).ToList();
+		return elements.Count != 0 ? [.. elements.Select(e => e.Value)] : [];
 	}
 
 	private static List<T> ReadPeople<T>(XElement parent, string localName, Func<string?, string, string?, T> factory)
 	{
-		var elements = parent.Elements(Namespaces.DcNs + localName);
-		return elements.Any()
-			? elements.Select(e => factory(GetAttr(e, "file-as"), e.Value, GetAttr(e, "role"))).ToList()
+		var elements = parent.Elements(Namespaces.DcNs + localName).ToList();
+		return elements.Count != 0
+			? [.. elements.Select(e => factory(GetAttr(e, "file-as"), e.Value, GetAttr(e, "role")))]
 			: [];
 	}
 
