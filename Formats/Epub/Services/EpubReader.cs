@@ -1,4 +1,5 @@
-﻿using System.Collections.Concurrent;
+using System.Buffers;
+using System.Collections.Concurrent;
 using System.IO.Compression;
 using System.Net;
 using System.Text;
@@ -29,6 +30,7 @@ public partial class EpubReader(IOptions<EbookManagerOptions> options) : IEbookR
 	private readonly ConcurrentDictionary<string, ZipArchiveEntry?> _archiveEntries = new(StringComparer.OrdinalIgnoreCase);
 	private readonly ConcurrentDictionary<string, Lazy<Task<string>>> _contentLoaders = new(StringComparer.OrdinalIgnoreCase);
 	private readonly ConcurrentDictionary<string, Lazy<Task<byte[]>>> _imageLoaders = new(StringComparer.OrdinalIgnoreCase);
+	private readonly ConcurrentDictionary<string, Lazy<Task>> _extractions = new(StringComparer.OrdinalIgnoreCase);
 
 	public async Task<Ebook> ReadMetadataAsync(string path)
 	{
@@ -272,7 +274,7 @@ public partial class EpubReader(IOptions<EbookManagerOptions> options) : IEbookR
 		var cssFiles = _package!.Manifest.Items.Where(x => x.MediaType.Equals("text/css"));
 		content.Stylesheets = await LoadStylesheets(cssFiles);
 
-		List<TocEntry> tableOfContents = [];
+		List<TocEntry> tableOfContents;
 		TocEntry? cover = null;
 		var coverItem = _package!.Manifest.Items.FirstOrDefault(x => x.Id == _package.Spine.ItemRefs.FirstOrDefault()?.IdRef);
 		if (coverItem != null)
@@ -285,12 +287,23 @@ public partial class EpubReader(IOptions<EbookManagerOptions> options) : IEbookR
 			};
 		}
 
+		// Normalized href (and id) -> item id, built once: GetManifestItemId used to
+		// re-normalize every manifest href for every nav entry (O(entries x items)).
+		var hrefToItemId = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+		foreach (var item in _package!.Manifest.Items)
+		{
+			var normalized = NormalizeArchivePath(CleanPath(item.Href) ?? string.Empty);
+			if (normalized.Length > 0)
+				hrefToItemId.TryAdd(normalized, item.Id);
+			hrefToItemId.TryAdd(item.Id, item.Id);
+		}
+
 		var navItem = _package!.Manifest.Items.FirstOrDefault(i => HasProperty(i, "nav"));
 		if (navItem is not null)
 		{
 			// V3 NAV TOC
 			var nav = await LoadNavAsync(navItem.Href);
-			tableOfContents = MapNavToTableOfContents(nav.ChapterList.SelectMany(x => x.Chapter));
+			tableOfContents = MapNavToTableOfContents(nav.ChapterList.SelectMany(x => x.Chapter), hrefToItemId);
 		}
 		else if (_package.Spine.Toc != null)
 		{
@@ -332,6 +345,7 @@ public partial class EpubReader(IOptions<EbookManagerOptions> options) : IEbookR
 		_archiveEntries.Clear();
 		_contentLoaders.Clear();
 		_imageLoaders.Clear();
+		_extractions.Clear();
 	}
 
 	private async Task<IReadOnlyList<Stylesheet>> LoadStylesheets(IEnumerable<Item> cssFiles)
@@ -339,16 +353,10 @@ public partial class EpubReader(IOptions<EbookManagerOptions> options) : IEbookR
 		var cssTasks = cssFiles.Select(async item =>
 		{
 			var css = await LoadFileContentAsync(item.Href);
-			var imports = CssImportRegex().Matches(css);
-			foreach (var import in imports.Cast<Match>())
-			{
-				css = css.Replace(import.Value, null);
-			}
-			var fontFaces = FontFaceRegex().Matches(css);
-			foreach (var fontFace in fontFaces.Cast<Match>())
-			{
-				css = css.Replace(fontFace.Value, null);
-			}
+			// Single-pass removal: the old Matches + per-match Replace loop allocated a
+			// MatchCollection plus a new string per match.
+			css = CssImportRegex().Replace(css, _ => string.Empty);
+			css = FontFaceRegex().Replace(css, _ => string.Empty);
 			var processedCss = HtmlHelpers.ApplyCssProcessing(css);
 			return new Stylesheet { Identifier = Path.GetFileNameWithoutExtension(item.Href), Content = processedCss  };
 		});
@@ -391,8 +399,9 @@ public partial class EpubReader(IOptions<EbookManagerOptions> options) : IEbookR
 	/// Maps the V3 NAV TOC to an EpubChapter list recursively
 	/// </summary>
 	/// <param name="navItems">List of Nav li items</param>
+	/// <param name="hrefToItemId">Dictionary of href to item id</param>
 	/// <returns>List of TocEntry</returns>
-	private List<TocEntry> MapNavToTableOfContents(IEnumerable<NavLi> navItems)
+	private List<TocEntry> MapNavToTableOfContents(IEnumerable<NavLi> navItems, Dictionary<string, string> hrefToItemId)
 	{
 		var entries = new List<TocEntry>();
 		foreach (var navItem in navItems)
@@ -406,12 +415,12 @@ public partial class EpubReader(IOptions<EbookManagerOptions> options) : IEbookR
 			var chapter = new TocEntry
 			{
 				Title = GetNavItemTitle(navItem),
-				Id = GetManifestItemId(href)
+				Id = GetManifestItemId(href, hrefToItemId)
 			};
 
 			if (navItem.ChapterList.Count > 0)
 			{
-				chapter.Entries = MapNavToTableOfContents(navItem.ChapterList.SelectMany(x => x.Chapter));
+				chapter.Entries = MapNavToTableOfContents(navItem.ChapterList.SelectMany(x => x.Chapter), hrefToItemId);
 			}
 
 			if (navItem.Link is null && chapter.Entries.Count == 0 && string.IsNullOrWhiteSpace(chapter.Title))
@@ -430,7 +439,7 @@ public partial class EpubReader(IOptions<EbookManagerOptions> options) : IEbookR
 		return string.IsNullOrWhiteSpace(title) ? title : title.Trim();
 	}
 
-	private string? GetManifestItemId(string? href)
+	private string? GetManifestItemId(string? href, Dictionary<string, string> hrefToItemId)
 	{
 		if (string.IsNullOrWhiteSpace(href))
 		{
@@ -443,9 +452,7 @@ public partial class EpubReader(IOptions<EbookManagerOptions> options) : IEbookR
 			return null;
 		}
 
-		return _package?.Manifest.Items.FirstOrDefault(x =>
-			string.Equals(NormalizeArchivePath(CleanPath(x.Href) ?? string.Empty), target, StringComparison.OrdinalIgnoreCase) ||
-			string.Equals(x.Id, target, StringComparison.OrdinalIgnoreCase))?.Id;
+		return hrefToItemId.GetValueOrDefault(target);
 	}
 
 	private static bool HasProperty(Item item, string propertyName)
@@ -455,9 +462,22 @@ public partial class EpubReader(IOptions<EbookManagerOptions> options) : IEbookR
 			return false;
 		}
 
-		return item.Properties
-			.Split(' ', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
-			.Contains(propertyName, StringComparer.OrdinalIgnoreCase);
+		// Span-based token scan: the old Split(' ') allocated an array on every call,
+		// and this runs inside a FirstOrDefault predicate over the whole manifest.
+		var properties = item.Properties.AsSpan();
+		var start = 0;
+		while (start < properties.Length)
+		{
+			while (start < properties.Length && properties[start] == ' ')
+				start++;
+			var end = start;
+			while (end < properties.Length && properties[end] != ' ')
+				end++;
+			if (end > start && properties.Slice(start, end - start).Equals(propertyName, StringComparison.OrdinalIgnoreCase))
+				return true;
+			start = end;
+		}
+		return false;
 	}
 
 	private async Task ExtractEntryToFolderAsync(string path, string destinationPath)
@@ -501,10 +521,15 @@ public partial class EpubReader(IOptions<EbookManagerOptions> options) : IEbookR
 		}
 
 		var manifestItems = _package.Manifest.Items.ToDictionary(static x => x.Id, static x => x, StringComparer.Ordinal);
-		var chapters = new List<Chapter>(_package.Spine.ItemRefs.Count);
+		var itemRefs = _package.Spine.ItemRefs;
+		var chapters = new Chapter[itemRefs.Count];
 		var currentChapterId = string.Empty;
 
-		foreach (var itemRef in _package.Spine.ItemRefs)
+		// Resolve each spine item up front (cheap, in order) so the workers only do
+		// the expensive load + parse + process work.
+		var workItems = new (Item Item, string ChapterId)[itemRefs.Count];
+		var workCount = 0;
+		foreach (var itemRef in itemRefs)
 		{
 			if (!manifestItems.TryGetValue(itemRef.IdRef, out var item))
 			{
@@ -516,30 +541,63 @@ public partial class EpubReader(IOptions<EbookManagerOptions> options) : IEbookR
 				currentChapterId = item.Id;
 			}
 
-			var content = await LoadFileContentAsync(item.Href);
+			workItems[workCount++] = (item, currentChapterId);
+		}
 
-			var document = new HtmlDocument();
-			document.LoadHtml(content);
-
-			var nodes = CollectNodes(document.DocumentNode);
-
-			var stylesheets = GetStylesheets(nodes.AllLinks);
-			var paragraphClass = GetParagraphClass(nodes.Paragraphs);
-			var title = GetTitle(nodes.Title);
-
-			var processedContent = await ApplyHtmlProcessingAsync(nodes.Body!, nodes);
-
-			chapters.Add(new Chapter
+		// Chapters are independent, so process them in parallel (bounded; fully async,
+		// zip access is serialized by _zipLock inside the loaders). Indexed writes keep
+		// the output identical to a sequential run.
+		const int maxParallelChapters = 4;
+		using var throttle = new SemaphoreSlim(maxParallelChapters);
+		var tasks = new Task[workCount];
+		for (var i = 0; i < workCount; i++)
+		{
+			var (item, chapterId) = workItems[i];
+			var index = i; // capture per iteration: the loop variable is shared across lambdas
+			await throttle.WaitAsync();
+			tasks[i] = Task.Run(async () =>
 			{
-				Identifier = currentChapterId,
-				Content = processedContent,
-				Title = title,
-				Stylesheets = stylesheets,
-				ParagraphClassName = paragraphClass
+				try
+				{
+					chapters[index] = await ProcessChapterAsync(item, chapterId);
+				}
+				finally
+				{
+					throttle.Release();
+				}
 			});
 		}
 
-		return chapters;
+		await Task.WhenAll(tasks);
+		return [.. chapters];
+	}
+
+	/// <summary>
+	/// Loads, parses and processes a single spine item into a <see cref="Chapter"/>.
+	/// </summary>
+	private async Task<Chapter> ProcessChapterAsync(Item item, string chapterId)
+	{
+		var content = await LoadFileContentAsync(item.Href);
+
+		var document = new HtmlDocument();
+		document.LoadHtml(content);
+
+		var nodes = CollectNodes(document.DocumentNode);
+
+		var stylesheets = GetStylesheets(nodes.AllLinks);
+		var paragraphClass = GetParagraphClass(nodes.Paragraphs);
+		var title = GetTitle(nodes.Title);
+
+		var processedContent = await ApplyHtmlProcessingAsync(nodes.Body!, nodes);
+
+		return new Chapter
+		{
+			Identifier = chapterId,
+			Content = processedContent,
+			Title = title,
+			Stylesheets = stylesheets,
+			ParagraphClassName = paragraphClass
+		};
 	}
 
 	/// <summary>
@@ -557,7 +615,9 @@ public partial class EpubReader(IOptions<EbookManagerOptions> options) : IEbookR
 		{
 			return NumericEntitiesRegex().Replace(input, match =>
 			{
-				var codePoint = int.Parse(match.Groups[1].Value);
+				var group = match.Groups[1];
+				// Parse from the match span: Group.Value would allocate per entity.
+				var codePoint = int.Parse(input.AsSpan(group.Index, group.Length));
 				return char.ConvertFromUtf32(codePoint);
 			});
 		}
@@ -593,7 +653,7 @@ public partial class EpubReader(IOptions<EbookManagerOptions> options) : IEbookR
 		var paragraphCount = 0;
 		foreach (var paragraph in paragraphs)
 		{
-			if (string.IsNullOrWhiteSpace(paragraph.InnerText))
+			if (!HasNonWhitespaceText(paragraph))
 			{
 				continue;
 			}
@@ -620,6 +680,32 @@ public partial class EpubReader(IOptions<EbookManagerOptions> options) : IEbookR
 		}
 
 		return bestClass;
+	}
+
+	/// <summary>
+	/// True if the subtree contains any non-whitespace text. Reads text-node values directly:
+	/// <c>HtmlNode.InnerText</c> on a text node returns the stored value without allocating,
+	/// while on an element it would build a full string (the old per-paragraph check).
+	/// </summary>
+	private static bool HasNonWhitespaceText(HtmlNode node)
+	{
+		for (var current = node; current is not null; current = current.NextSibling)
+		{
+			if (current.NodeType == HtmlNodeType.Text)
+			{
+				var value = current.InnerText;
+				for (var i = 0; i < value.Length; i++)
+				{
+					if (!char.IsWhiteSpace(value[i]))
+						return true;
+				}
+			}
+			else if (current.HasChildNodes && HasNonWhitespaceText(current.FirstChild!))
+			{
+				return true;
+			}
+		}
+		return false;
 	}
 
 	/// <summary>
@@ -660,7 +746,7 @@ public partial class EpubReader(IOptions<EbookManagerOptions> options) : IEbookR
 		return await ApplyHtmlProcessingAsync(content, nodes);
 	}
 
-	internal async Task<string> ApplyHtmlProcessingAsync(HtmlNode content, ChapterNodes nodes)
+	private async Task<string> ApplyHtmlProcessingAsync(HtmlNode content, ChapterNodes nodes)
 	{
 		if (content.ChildNodes.Count == 0)
 			return string.Empty;
@@ -703,7 +789,9 @@ public partial class EpubReader(IOptions<EbookManagerOptions> options) : IEbookR
 				var imagePath = Path.Combine(options.Value.CachePath, _cacheFolder!, fileName);
 				if (!File.Exists(imagePath))
 				{
-					await ExtractEntryToFolderAsync(src, imagePath);
+					// Chapters are processed in parallel: dedupe concurrent extractions of the
+					// same destination so two workers never write the same file at once.
+					await _extractions.GetOrAdd(imagePath, _ => new Lazy<Task>(() => ExtractEntryToFolderAsync(src, imagePath))).Value;
 				}
 
 				var url = "/cache/" + _cacheFolder + "/" + fileName;
@@ -892,8 +980,22 @@ public partial class EpubReader(IOptions<EbookManagerOptions> options) : IEbookR
 		{
 			var entry = GetArchiveEntry(absolutePath) ?? throw new Exception($"Could not load file: {absolutePath}");
 			await using var stream = await entry.OpenAsync();
-			using var reader = new StreamReader(stream, Encoding.UTF8, true);
-			return await reader.ReadToEndAsync();
+			var length = (int)entry.Length;
+			var buffer = ArrayPool<byte>.Shared.Rent(length);
+			try
+			{
+				await stream.ReadExactlyAsync(buffer.AsMemory(0, length));
+				// Decode straight from the pooled buffer: skips the StreamReader's async
+				// state machine and internal buffer growth (both showed up in the trace).
+				var span = buffer.AsSpan(0, length);
+				if (span.Length >= 3 && span[0] == 0xEF && span[1] == 0xBB && span[2] == 0xBF)
+					span = span.Slice(3); // strip BOM, as the old StreamReader(detectEncodingFromByteOrderMarks: true) did
+				return Encoding.UTF8.GetString(span);
+			}
+			finally
+			{
+				ArrayPool<byte>.Shared.Return(buffer);
+			}
 		}
 		finally
 		{
