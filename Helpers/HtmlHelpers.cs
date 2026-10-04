@@ -1,7 +1,4 @@
-﻿using System.Security.Cryptography;
-using System.Text.RegularExpressions;
-using HtmlAgilityPack;
-using HtmlAgilityPack.CssSelectors.NetCore;
+﻿using System.Text.RegularExpressions;
 
 namespace BookHeaven.EbookManager.Helpers;
 
