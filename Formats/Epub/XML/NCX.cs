@@ -43,11 +43,14 @@ public class NCX
 		{
 			ncx.Head = new NCXHead
 			{
-				Meta = head.Elements(Namespaces.NcxNs + "meta").Select(e => new NCXMeta
-				{
-					Name = e.Attribute("name")?.Value ?? string.Empty,
-					Content = e.Attribute("content")?.Value ?? string.Empty
-				}).ToList()
+				Meta =
+				[
+					.. head.Elements(Namespaces.NcxNs + "meta").Select(e => new NCXMeta
+					{
+						Name = e.Attribute("name")?.Value ?? string.Empty,
+						Content = e.Attribute("content")?.Value ?? string.Empty
+					})
+				]
 			};
 		}
 
@@ -96,10 +99,10 @@ public class NCX
 			result.Content = new NCXContent { Src = content.Attribute("src")?.Value ?? string.Empty };
 		}
 
-		var childNavPoints = navPoint.Elements(Namespaces.NcxNs + "navPoint");
-		if (childNavPoints.Any())
+		var childNavPoints = navPoint.Elements(Namespaces.NcxNs + "navPoint").ToList();
+		if (childNavPoints.Count != 0)
 		{
-			result.NavPoints = childNavPoints.Select(ParseNavPoint).ToList();
+			result.NavPoints = [.. childNavPoints.Select(ParseNavPoint)];
 		}
 
 		return result;
