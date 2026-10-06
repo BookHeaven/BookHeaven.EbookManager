@@ -117,7 +117,7 @@ internal static class DropCapHelper
     }
 
     private static bool IsOpeningPunctuation(char c)
-        => c is '¡' or '¿';
+        => c is '¡' or '¿' or '«' or '(' or '[' or '{' or '“' or '‘' or '‹';
 
     private static bool HasSufficientText(HtmlNode paragraph)
         => paragraph.InnerText.Trim().Length >= MinParagraphLength;
