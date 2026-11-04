@@ -1,4 +1,5 @@
-﻿using System.Text.RegularExpressions;
+﻿using System.Collections.Frozen;
+using System.Text.RegularExpressions;
 
 namespace BookHeaven.EbookManager.Helpers;
 
@@ -45,8 +46,8 @@ internal static partial class HtmlHelpers
 	    $@"(?<prop>{string.Join("|", CustomStyles.Select(static p => Regex.Escape(p.Property)))}):\s*(?<val>[^;}}]+?)(?<delim>;|}})",
 	    RegexOptions.Compiled | RegexOptions.CultureInvariant);
 
-    private static readonly Dictionary<string, CssProperty> CssPropertyLookup =
-	    CustomStyles.ToDictionary(static p => p.Property, StringComparer.Ordinal);
+    private static readonly FrozenDictionary<string, CssProperty> CssPropertyLookup =
+	    CustomStyles.ToFrozenDictionary(static p => p.Property, StringComparer.Ordinal);
     
     /// <summary>
     /// Cheap, allocation-free pre-check: does <paramref name="css"/> contain any property that
