@@ -1,6 +1,8 @@
-﻿using System.Security.Cryptography;
+﻿using System.Collections.Frozen;
+using System.Security.Cryptography;
 using System.Text;
 using BookHeaven.EbookManager.Formats.Pdf.Entities;
+using BookHeaven.EbookManager.Formats.Pdf.Enums;
 using BookHeaven.EbookManager.Formats.Pdf.Parsers;
 using iText.Kernel.Geom;
 using iText.Kernel.Pdf.Canvas.Parser;
@@ -10,12 +12,22 @@ using Path = System.IO.Path;
 
 namespace BookHeaven.EbookManager.Formats.Pdf.EventListeners;
 
-internal class HtmlExtractionStrategy(PdfDocumentContext context, Rectangle pageSize) : IEventListener
+internal sealed class HtmlExtractionStrategy(PdfDocumentContext context, Rectangle pageSize) : IEventListener
 {
-    
+    private static readonly HashSet<EventType> SupportedEvents = [EventType.RENDER_TEXT, EventType.RENDER_IMAGE];
+
+    private static readonly FrozenDictionary<Alignment, string> AlignmentCssValues =
+        new Dictionary<Alignment, string>
+        {
+            [Alignment.Left] = "left",
+            [Alignment.Center] = "center",
+            [Alignment.Right] = "right",
+            [Alignment.Justify] = "justify",
+        }.ToFrozenDictionary();
+
     private readonly List<PdfBaseElement> _elements = [];
-    
-    public ICollection<EventType> GetSupportedEvents() => new HashSet<EventType> { EventType.RENDER_TEXT, EventType.RENDER_IMAGE };
+
+    public ICollection<EventType> GetSupportedEvents() => SupportedEvents;
     
     public void EventOccurred(IEventData data, EventType type)
     {
@@ -25,7 +37,7 @@ internal class HtmlExtractionStrategy(PdfDocumentContext context, Rectangle page
                 var textRenderInfo = (TextRenderInfo)data;
                 var text = textRenderInfo.GetText();
                 
-                var font = textRenderInfo.GetFont().GetFontProgram().GetFontNames().GetFontName().ToLower();
+                var fontName = textRenderInfo.GetFont().GetFontProgram().GetFontNames().GetFontName();
                 var baseStart = textRenderInfo.GetBaseline().GetStartPoint();
                 var baseEnd = textRenderInfo.GetBaseline().GetEndPoint();
                 var ascentStart = textRenderInfo.GetAscentLine().GetStartPoint();
@@ -40,8 +52,8 @@ internal class HtmlExtractionStrategy(PdfDocumentContext context, Rectangle page
                     Height = ascentStart.Get(1) - descentStart.Get(1),
                     SpaceWidth = textRenderInfo.GetSingleSpaceWidth(),
                     Width = baseEnd.Get(0) - baseStart.Get(0),
-                    IsBold = font.Contains("bold"),
-                    IsItalic = font.Contains("italic"),
+                    IsBold = fontName.Contains("bold", StringComparison.OrdinalIgnoreCase),
+                    IsItalic = fontName.Contains("italic", StringComparison.OrdinalIgnoreCase),
                     FontSize = textRenderInfo.GetFontSize()
                 });
                 break;
@@ -100,10 +112,17 @@ internal class HtmlExtractionStrategy(PdfDocumentContext context, Rectangle page
     public string GetHtml()
     {
         if(_elements.Count == 0) return string.Empty;
-        var textBlocks = _elements.OfType<PdfText>().ToList();
-        var images = _elements.OfType<PdfImage>().ToList();
 
-        var htmlElements = new List<PdfBaseElement>();
+        // Single pass: the old OfType().ToList() x2 walked the list twice and allocated two copies.
+        var textBlocks = new List<PdfText>();
+        var images = new List<PdfImage>();
+        foreach (var element in _elements)
+        {
+            if (element is PdfText text) textBlocks.Add(text);
+            else if (element is PdfImage image) images.Add(image);
+        }
+
+        var htmlElements = new List<PdfBaseElement>(textBlocks.Count + images.Count);
 
         if (textBlocks.Count > 0) htmlElements.AddRange(textBlocks.GroupIntoParagraphs());
         if(images.Count > 0) htmlElements.AddRange(images);
@@ -118,7 +137,7 @@ internal class HtmlExtractionStrategy(PdfDocumentContext context, Rectangle page
             switch (element)
             {
                 case PdfText textElement:
-                    sb.AppendLine($"<p style='text-align: {textElement.Alignment.ToString().ToLower()};'>{textElement.Text}</p>");
+                    sb.AppendLine($"<p style='text-align: {AlignmentCssValues[textElement.Alignment]};'>{textElement.Text}</p>");
                     break;
                 case PdfImage imageElement:
                 {
