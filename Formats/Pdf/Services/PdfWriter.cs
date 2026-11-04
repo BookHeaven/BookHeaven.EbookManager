@@ -10,7 +10,7 @@ namespace BookHeaven.EbookManager.Formats.Pdf.Services;
 
 public class PdfWriter : IEbookWriter
 {
-    private static Task ProcessPdfAsync(string bookPath, Action<PdfDocument, PdfDocument> processAction)
+    private static Task ProcessPdfAsync(string bookPath, Action<PdfDocument, PdfDocument> processAction) => Task.Run(() =>
     {
         var tempPath = Path.GetTempFileName();
         using (var srcDoc = new PdfDocument(new iText.Kernel.Pdf.PdfReader(bookPath)))
@@ -20,8 +20,7 @@ public class PdfWriter : IEbookWriter
         }
         File.Copy(tempPath, bookPath, true);
         File.Delete(tempPath);
-        return Task.CompletedTask;
-    }
+    });
 
     public Task ReplaceMetadataAsync(string bookPath, Ebook ebook)
     {
