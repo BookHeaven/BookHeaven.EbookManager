@@ -1,4 +1,5 @@
-﻿using System.Xml;
+﻿using System.Text;
+using System.Xml;
 using System.Xml.Linq;
 using System.Xml.Serialization;
 using BookHeaven.EbookManager.Formats.Epub.Constants;
@@ -115,21 +116,21 @@ public class NavA
     
     private static string GetTextFromLink(XmlElement element)
     {
-        var text = string.Empty;
-        if (!element.HasChildNodes) return text;
-        
+        if (!element.HasChildNodes) return string.Empty;
+
+        var sb = new StringBuilder();
         foreach (XmlNode child in element.ChildNodes)
         {
             switch (child.NodeType)
             {
                 case XmlNodeType.Text:
-                    text += child.Value;
+                    sb.Append(child.Value);
                     break;
                 case XmlNodeType.Element:
-                    text += GetTextFromLink((XmlElement)child);
+                    sb.Append(GetTextFromLink((XmlElement)child));
                     break;
             }
         }
-        return text;
+        return sb.ToString();
     }
 }
