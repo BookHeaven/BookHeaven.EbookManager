@@ -271,7 +271,7 @@ public partial class EpubReader(IOptions<EbookManagerOptions> options) : IEbookR
 	{
 		var content = new Content();
 
-		var cssFiles = _package!.Manifest.Items.Where(x => x.MediaType.Equals("text/css"));
+		var cssFiles = _package!.Manifest.Items.Where(x => x.MediaType.Equals("text/css", StringComparison.OrdinalIgnoreCase));
 		content.Stylesheets = await LoadStylesheets(cssFiles);
 
 		List<TocEntry> tableOfContents;
@@ -373,7 +373,7 @@ public partial class EpubReader(IOptions<EbookManagerOptions> options) : IEbookR
 		var entries = new List<TocEntry>();
 		foreach (var navPoint in navpoints)
 		{
-			if (_coverPath is not null && _coverPath.EndsWith(CleanPath(navPoint.Content?.Src) ?? " "))
+			if (_coverPath is not null && _coverPath.EndsWith(CleanPath(navPoint.Content?.Src) ?? " ", StringComparison.Ordinal))
 			{
 				continue;
 			}
@@ -381,7 +381,7 @@ public partial class EpubReader(IOptions<EbookManagerOptions> options) : IEbookR
 			var chapter = new TocEntry
 			{
 				Title = navPoint.NavLabel?.Text,
-				Id = _package!.Manifest.Items.FirstOrDefault(x => x.Href.EndsWith(CleanPath(navPoint.Content?.Src) ?? " "))?.Id
+				Id = _package!.Manifest.Items.FirstOrDefault(x => x.Href.EndsWith(CleanPath(navPoint.Content?.Src) ?? " ", StringComparison.Ordinal))?.Id
 			};
 
 			if (navPoint.NavPoints.Count > 0)
@@ -553,23 +553,25 @@ public partial class EpubReader(IOptions<EbookManagerOptions> options) : IEbookR
 		for (var i = 0; i < workCount; i++)
 		{
 			var (item, chapterId) = workItems[i];
-			var index = i; // capture per iteration: the loop variable is shared across lambdas
 			await throttle.WaitAsync();
-			tasks[i] = Task.Run(async () =>
-			{
-				try
-				{
-					chapters[index] = await ProcessChapterAsync(item, chapterId);
-				}
-				finally
-				{
-					throttle.Release();
-				}
-			});
+			tasks[i] = ProcessChapterWithThrottle(item, chapterId, i);
 		}
 
 		await Task.WhenAll(tasks);
 		return [.. chapters];
+
+		// Starts inline (no Task.Run hop) and releases the throttle slot on completion.
+		async Task ProcessChapterWithThrottle(Item item, string chapterId, int index)
+		{
+			try
+			{
+				chapters[index] = await ProcessChapterAsync(item, chapterId);
+			}
+			finally
+			{
+				throttle.Release();
+			}
+		}
 	}
 
 	/// <summary>
