@@ -14,13 +14,18 @@ namespace BookHeaven.EbookManager.Formats.Pdf.Services;
 public class PdfReader(IOptions<EbookManagerOptions> options) : IEbookReader
 {
     
-    public Task<Ebook> ReadMetadataAsync(string path)
+    public Task<Ebook> ReadMetadataAsync(string path) => Task.Run(() =>
+    {
+        using var pdfDocument = new PdfDocument(new iText.Kernel.Pdf.PdfReader(path));
+        return ReadMetadata(path, pdfDocument);
+    });
+
+    private static Ebook ReadMetadata(string path, PdfDocument pdfDocument)
     {
         var ebook = new Ebook
         {
             Format = Format.Pdf
         };
-        using var pdfDocument = new PdfDocument(new iText.Kernel.Pdf.PdfReader(path));
 
         // Use PdfCanvasProcessor to extract the first image from the first page
         var coverPage = pdfDocument.GetPage(1);
@@ -34,7 +39,7 @@ public class PdfReader(IOptions<EbookManagerOptions> options) : IEbookReader
         ebook.Synopsis = pdfDocument.GetDocumentInfo().GetSubject();
         ebook.Pages = pdfDocument.GetNumberOfPages();
 
-        return Task.FromResult(ebook);
+        return ebook;
     }
 
     // Listener to extract the first image found
@@ -57,27 +62,38 @@ public class PdfReader(IOptions<EbookManagerOptions> options) : IEbookReader
 
     public async Task<Ebook> ReadAllAsync(string path)
     {
-        var ebook = await ReadMetadataAsync(path);
-        
-        using var pdfDocument = new PdfDocument(new iText.Kernel.Pdf.PdfReader(path));
-        var documentContext = new PdfDocumentContext
+        return await Task.Run(async () =>
         {
-            Document = pdfDocument,
-            CachePath = Path.Combine(options.Value.CachePath, Path.GetFileNameWithoutExtension(path)),
-            CacheUrl = Path.Combine("/cache", Path.GetFileNameWithoutExtension(path))
-        };
-        // Get outlines (table of contents)
-        var outlines = pdfDocument.GetOutlines(false);
-        var tree = pdfDocument.GetCatalog().GetNameTree(PdfName.Dests);
-        var toc = await MapOutlinesToTableOfContents(pdfDocument, tree, outlines?.GetAllChildren() ?? []);
-        if (toc.Count > 0 && toc.All(e => e.Id != "1"))
-        {
-            toc.Insert(0, new TocEntry { Id = "1", Title = "Cover" });
-        }
-        ebook.Content.TableOfContents = toc;
-        ebook.Content.Chapters = await MapPagesToChapters(documentContext, toc);
+            // Single open: the old code opened the PDF twice (once in ReadMetadataAsync, once here).
+            using var pdfDocument = new PdfDocument(new iText.Kernel.Pdf.PdfReader(path));
+            var ebook = ReadMetadata(path, pdfDocument);
 
-        return ebook;
+            var documentContext = new PdfDocumentContext
+            {
+                Document = pdfDocument,
+                CachePath = Path.Combine(options.Value.CachePath, Path.GetFileNameWithoutExtension(path)),
+                CacheUrl = Path.Combine("/cache", Path.GetFileNameWithoutExtension(path))
+            };
+            // Get outlines (table of contents)
+            var outlines = pdfDocument.GetOutlines(false);
+            var tree = pdfDocument.GetCatalog().GetNameTree(PdfName.Dests);
+            var toc = await MapOutlinesToTableOfContents(pdfDocument, tree, outlines?.GetAllChildren() ?? []);
+            if (toc.Count > 0 && !ContainsCover(toc))
+            {
+                toc.Insert(0, new TocEntry { Id = "1", Title = "Cover" });
+            }
+            ebook.Content.TableOfContents = toc;
+            ebook.Content.Chapters = await MapPagesToChapters(documentContext, toc);
+
+            return ebook;
+        });
+    }
+
+    private static bool ContainsCover(List<TocEntry> toc)
+    {
+        foreach (var entry in toc)
+            if (entry.Id == "1") return true;
+        return false;
     }
     
     private static async Task<List<TocEntry>> MapOutlinesToTableOfContents(PdfDocument pdfDocument, PdfNameTree tree, IList<PdfOutline> outlines)
