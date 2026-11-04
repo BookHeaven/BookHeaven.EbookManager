@@ -1,4 +1,5 @@
-﻿using System.Text;
+﻿using System.Buffers;
+using System.Text;
 using System.Text.RegularExpressions;
 using BookHeaven.EbookManager.Formats.Pdf.Entities;
 using BookHeaven.EbookManager.Formats.Pdf.EventListeners;
@@ -8,7 +9,7 @@ namespace BookHeaven.EbookManager.Formats.Pdf.Converters;
 
 internal static partial class PdfToHtmlConverter
 {
-    private static readonly char[] PunctuationMarks = ['.', '!', '?'];
+    private static readonly SearchValues<char> PunctuationMarks = SearchValues.Create('.', '!', '?');
     
     public static async Task<string> ConvertToHtml(this PdfDocumentContext context, int startPage, int endPage)
     {
@@ -39,45 +40,67 @@ internal static partial class PdfToHtmlConverter
         }
 
         var sb = new StringBuilder();
-        sb.AppendLine(pages[0].Trim());
+        var firstPage = pages[0].Trim();
+        sb.AppendLine(firstPage);
+
+        // Track the last complete paragraph's buffer positions incrementally: the old
+        // sb.ToString() per page re-serialized the whole buffer (O(n^2) for long books).
+        var lastParaStart = -1;
+        var lastParaEnd = -1;
+        UpdateLastParagraph(0, firstPage, ref lastParaStart, ref lastParaEnd);
 
         for (var i = 1; i < pages.Count; i++)
         {
             var page = pages[i].Trim();
             if (string.IsNullOrEmpty(page)) continue;
 
-            var sbStr = sb.ToString();
-            var lastParaEnd = sbStr.LastIndexOf("</p>", StringComparison.OrdinalIgnoreCase);
-            if (lastParaEnd == -1) { sb.AppendLine(page); continue; }
-            
-            // Find the last opening <p ...> tag before </p>
-            var lastParaStart = sbStr.LastIndexOf("<p", lastParaEnd, StringComparison.OrdinalIgnoreCase);
-            if (lastParaStart == -1 || lastParaStart >= lastParaEnd) { sb.AppendLine(page); continue; }
-            var lastPara = sbStr.Substring(lastParaStart, lastParaEnd + 4 - lastParaStart);
-
-            // Check if the last paragraph ends with a punctuation mark
-            var lastCharIndex = lastPara.LastIndexOfAny(PunctuationMarks);
-            if (lastCharIndex == -1 || lastCharIndex < lastPara.Length - 5)
+            if (lastParaEnd != -1)
             {
-                // Try to merge with the first paragraph of the new page
-                var match = OpenParagraphTagRegex().Match(page);
-                var firstParaEnd = page.IndexOf("</p>", StringComparison.OrdinalIgnoreCase);
-                if (match.Success && firstParaEnd != -1 && match.Index < firstParaEnd)
+                // Bounded allocation: only the last paragraph, not the whole buffer.
+                var lastPara = sb.ToString(lastParaStart, lastParaEnd + 4 - lastParaStart);
+
+                // Check if the last paragraph ends with a punctuation mark
+                var lastCharIndex = lastPara.AsSpan().LastIndexOfAny(PunctuationMarks);
+                if (lastCharIndex != -1 && lastCharIndex >= lastPara.Length - 5)
                 {
-                    var firstParaContentStart = match.Index + match.Length;
-                    var firstParaContentLength = firstParaEnd - firstParaContentStart;
-                    var firstParaContent = page.Substring(firstParaContentStart, firstParaContentLength);
-                    var mergedPara = string.Concat(lastPara.AsSpan(0, lastPara.Length - 4), " ", firstParaContent, "</p>");
-                    sb.Remove(lastParaStart, lastPara.Length);
-                    sb.AppendLine(mergedPara);
-                    page = page[(firstParaEnd + 4)..].Trim();
+                    // Try to merge with the first paragraph of the new page
+                    var match = OpenParagraphTagRegex().Match(page);
+                    var firstParaEnd = page.IndexOf("</p>", StringComparison.OrdinalIgnoreCase);
+                    if (match.Success && firstParaEnd != -1 && match.Index < firstParaEnd)
+                    {
+                        var firstParaContentStart = match.Index + match.Length;
+                        var mergedPara = string.Concat(
+                            lastPara.AsSpan(0, lastPara.Length - 4),
+                            " ".AsSpan(),
+                            page.AsSpan(firstParaContentStart, firstParaEnd - firstParaContentStart),
+                            "</p>".AsSpan());
+                        sb.Remove(lastParaStart, lastPara.Length);
+                        sb.AppendLine(mergedPara);
+                        lastParaEnd = lastParaStart + mergedPara.Length - 4;
+                        page = page[(firstParaEnd + 4)..].Trim();
+                    }
                 }
             }
 
+            var appendPos = sb.Length;
             sb.AppendLine(page);
+            UpdateLastParagraph(appendPos, page, ref lastParaStart, ref lastParaEnd);
         }
 
         return sb.ToString().Trim();
+
+        // Records the last complete <p>...</p> of <paramref name="page"/> (appended at
+        // <paramref name="appendPos"/>) as buffer-absolute positions. If the page has no
+        // complete paragraph, the previous tracking is kept.
+        static void UpdateLastParagraph(int appendPos, string page, ref int lastParaStart, ref int lastParaEnd)
+        {
+            var paraEnd = page.LastIndexOf("</p>", StringComparison.OrdinalIgnoreCase);
+            if (paraEnd == -1) return;
+            var paraStart = page.LastIndexOf("<p", paraEnd, StringComparison.OrdinalIgnoreCase);
+            if (paraStart == -1 || paraStart >= paraEnd) return;
+            lastParaStart = appendPos + paraStart;
+            lastParaEnd = appendPos + paraEnd;
+        }
     }
 
 
