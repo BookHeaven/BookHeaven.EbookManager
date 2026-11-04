@@ -1,4 +1,4 @@
-name: Publish EpubManager NuGet Package
+name: Publish EbookManager NuGet Package
 
 on:
   push:
