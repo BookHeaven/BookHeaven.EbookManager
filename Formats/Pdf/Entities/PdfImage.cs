@@ -2,7 +2,7 @@
 
 namespace BookHeaven.EbookManager.Formats.Pdf.Entities;
 
-internal class PdfImage : PdfBaseElement
+internal sealed class PdfImage : PdfBaseElement
 {
     public string? Src { get; init; }
     

@@ -2,7 +2,7 @@
 
 namespace BookHeaven.EbookManager.Formats.Pdf.Entities;
 
-internal class PdfText : PdfBaseElement
+internal sealed class PdfText : PdfBaseElement
 {
     public string Text { get; set; } = string.Empty;
     public bool IsBold { get; set; }

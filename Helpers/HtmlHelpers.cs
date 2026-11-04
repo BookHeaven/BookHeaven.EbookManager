@@ -17,7 +17,7 @@ internal static partial class HtmlHelpers
         ReplaceProperty
     }
     
-    private class CssProperty
+    private sealed class CssProperty
     {
         public string Property { get; init; } = null!;
         public string NewProperty { get; init; } = null!;
