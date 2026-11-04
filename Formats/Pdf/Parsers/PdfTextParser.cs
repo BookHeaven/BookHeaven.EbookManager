@@ -10,23 +10,38 @@ internal static class PdfTextParser
 
     public static List<PdfBaseElement> GroupIntoParagraphs(this IList<PdfText> chunks)
     {
-        if (!chunks.Any()) return [];
+        if (chunks.Count == 0) return [];
         
-        var heights = chunks.Select(c => c.Height).Where(h => h > 0).ToList();
+        var heights = new List<float>(chunks.Count);
+        foreach (var c in chunks)
+            if (c.Height > 0) heights.Add(c.Height);
         var medianHeight = heights.Count != 0 ? Median(heights) : 10f;
         
         var lineTolerance = medianHeight * LineToleranceFactor;
         
         // Group by lines based on Y coordinate
         var lines = new List<(float Y, List<PdfText> Chunks)>();
-        var byY = chunks.OrderByDescending(c => c.Y).ToList();
+        var byY = chunks.ToList();
+        byY.Sort(static (a, b) => b.Y.CompareTo(a.Y));
         foreach (var c in byY)
         {
-            var matched = lines.FirstOrDefault(l => Math.Abs(l.Y - c.Y) <= lineTolerance);
-            if (matched.Chunks != null)
+            var matchedIndex = -1;
+            for (var j = 0; j < lines.Count; j++)
             {
-                matched.Chunks.Add(c);
-                matched.Y = matched.Chunks.Average(ch => ch.Y);
+                if (Math.Abs(lines[j].Y - c.Y) <= lineTolerance)
+                {
+                    matchedIndex = j;
+                    break;
+                }
+            }
+            if (matchedIndex >= 0)
+            {
+                var line = lines[matchedIndex];
+                line.Chunks.Add(c);
+                var sum = 0f;
+                foreach (var ch in line.Chunks) sum += ch.Y;
+                // Write back through the index: assigning to the tuple copy would be lost.
+                lines[matchedIndex] = (sum / line.Chunks.Count, line.Chunks);
             }
             else
             {
@@ -34,19 +49,31 @@ internal static class PdfTextParser
             }
         }
         
-        var orderedLines = lines
-            .Select(l => new PdfText {
-                X = l.Chunks.Min(ch => ch.X),
+        var orderedLines = new List<PdfText>(lines.Count);
+        foreach (var l in lines)
+        {
+            var minX = float.MaxValue;
+            var minFontSize = float.MaxValue;
+            var maxEndX = float.MinValue;
+            foreach (var ch in l.Chunks)
+            {
+                if (ch.X < minX) minX = ch.X;
+                if (ch.FontSize < minFontSize) minFontSize = ch.FontSize;
+                if (ch.EndX > maxEndX) maxEndX = ch.EndX;
+            }
+            orderedLines.Add(new PdfText
+            {
+                X = minX,
                 Y = l.Y,
-                FontSize = l.Chunks.Min(ch => ch.FontSize),
-                Width = l.Chunks.Max(ch => ch.EndX) - l.Chunks.Min(ch => ch.X),
+                FontSize = minFontSize,
+                Width = maxEndX - minX,
                 Text = BuildLine(l.Chunks)
-            })
-            .OrderByDescending(l => l.Y)
-            .ToList();
+            });
+        }
+        orderedLines.Sort(static (a, b) => b.Y.CompareTo(a.Y));
         
         // Calculate paragraph gaps
-        var gaps = new List<float>();
+        var gaps = new List<float>(orderedLines.Count - 1);
         for (var i = 0; i < orderedLines.Count - 1; i++)
         {
             var gap = Math.Abs(orderedLines[i].Y - orderedLines[i + 1].Y);
@@ -56,7 +83,7 @@ internal static class PdfTextParser
         var paragraphGapThreshold = typicalGap * ParagraphGapFactor;
         
         // Group into paragraphs
-        var paragraphs = new List<PdfText>();
+        var paragraphs = new List<PdfBaseElement>();
         var cur = new List<string> { orderedLines[0].Text.Trim() };
         
 
@@ -70,7 +97,7 @@ internal static class PdfTextParser
             
             if (gap > paragraphGapThreshold || endOfParagraph)
             {
-                paragraphs.Add(new()
+                paragraphs.Add(new PdfText
                 {
                     Y = orderedLines[i].Y,
                     X = orderedLines[i].X,
@@ -86,7 +113,7 @@ internal static class PdfTextParser
             }
         }
         if (cur.Count != 0)
-            paragraphs.Add(new()
+            paragraphs.Add(new PdfText
             {
                 Y = orderedLines.Last().Y,
                 X = orderedLines.Last().X,
@@ -97,7 +124,9 @@ internal static class PdfTextParser
         
         if (paragraphs.Count > 0)
         {
-            var minX = paragraphs.Min(p => p.X);
+            var minX = float.MaxValue;
+            foreach (var p in paragraphs)
+                if (p.X < minX) minX = p.X;
             if (minX > 0)
             {
                 foreach (var p in paragraphs)
@@ -108,7 +137,7 @@ internal static class PdfTextParser
             }
         }
         
-        return paragraphs.Cast<PdfBaseElement>().ToList();
+        return paragraphs;
     }
     
     private static string BuildLine(List<PdfText> chunks)
@@ -116,7 +145,9 @@ internal static class PdfTextParser
         var sb = new StringBuilder();
         PdfText? prev = null;
 
-        foreach (var chunk in chunks.OrderBy(ch => ch.X))
+        var sorted = chunks.ToList();
+        sorted.Sort(static (a, b) => a.X.CompareTo(b.X));
+        foreach (var chunk in sorted)
         {
             if (prev != null)
             {
@@ -155,7 +186,8 @@ internal static class PdfTextParser
     
     private static float Median(List<float> values)
     {
-        var s = values.OrderBy(v => v).ToList();
+        var s = values.ToList();
+        s.Sort();
         var n = s.Count;
         if (n == 0) return 0;
         if (n % 2 == 1) return s[n / 2];
