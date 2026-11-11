@@ -1,7 +1,7 @@
 ﻿<Project Sdk="Microsoft.NET.Sdk">
 
     <PropertyGroup>
-        <TargetFramework>net10.0</TargetFramework>
+        <TargetFramework>net11.0</TargetFramework>
         <Nullable>enable</Nullable>
         <LangVersion>default</LangVersion>
         <PackageId>BookHeaven.EbookManager</PackageId>
@@ -17,7 +17,6 @@
         <PackageReference Include="HtmlAgilityPack.CssSelectors.NetCore" Version="1.2.1"/>
         <PackageReference Include="itext" Version="9.8.0"/>
         <PackageReference Include="itext.bouncy-castle-adapter" Version="9.8.0"/>
-        <PackageReference Include="Microsoft.Extensions.DependencyInjection.Abstractions" Version="10.0.14" />
         <PackageReference Include="Newtonsoft.Json" Version="13.0.4"/>
     </ItemGroup>
 </Project>
