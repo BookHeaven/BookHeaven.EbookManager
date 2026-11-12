@@ -3,7 +3,7 @@
     <PropertyGroup>
         <TargetFramework>net11.0</TargetFramework>
         <Nullable>enable</Nullable>
-        <LangVersion>default</LangVersion>
+        <LangVersion>latest</LangVersion>
         <PackageId>BookHeaven.EbookManager</PackageId>
         <Authors>Guillem Garrido</Authors>
         <RepositoryUrl>https://github.com/BookHeaven/BookHeaven.EbookManager</RepositoryUrl>
